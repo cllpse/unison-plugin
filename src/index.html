@@ -5,6 +5,10 @@
     <meta charset="utf-8">
 
     <style>
+      :root {
+        --font-family: system-ui, -apple-system, Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', sans-serif;
+      }
+
       *, ::before, ::after {
         box-sizing: border-box;
         user-select: none;
@@ -27,7 +31,7 @@
       }
 
       body, input[type="checkbox"]::after {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        font-family: var(--font-family);
         font-size: 12px;
         line-height: calc(12px * 1.5);
         color: var(--figma-color-text);
@@ -76,7 +80,7 @@
         justify-content: center;
         width: 100%;
         height: 100%;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        font-family: var(--font-family);
         opacity: 0.9;
       }
 
@@ -99,6 +103,67 @@
         user-select: text;
         border-bottom: 1px solid var(--figma-color-border);
         white-space: nowrap;
+      }
+
+      menu {
+        display: flex;
+        flex-direction: row;
+        flex-shrink: 0;
+        padding: 0;
+        border: none;
+        position: absolute;
+        top: 34px;
+        right: 0px;
+        padding-top: 5px;
+        padding-right: 4px;
+      }
+
+      button {
+        appearance: none;
+        position: relative;
+        border: none;
+        outline: none;
+        background-color: transparent;
+        width: 40px;
+        height: 40px;
+        border-radius: 100%;
+        cursor: pointer;
+
+        &:after {
+          position: absolute;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          top: 0;
+          left: 0;
+          width: 43px;
+          height: 36px;
+          font-family: var(--font-family);
+          pointer-events: none;
+          color: var(--figma-color-text-tertiary);
+        }
+
+        &:hover {
+          background-color: var(--figma-color-border);
+
+          &:after {
+            color: var(--figma-color-text);
+          }
+        }
+      }
+
+      button#refresh:after {
+        content: "⟳";
+        width: 43px;
+        height: 36px;
+        transform: scale(2);
+      }
+
+      button#back:after {
+        content: "←";
+        width: 40px;
+        height: 38px;
+        transform: scale(1.333);
       }
 
       summary {
@@ -203,25 +268,12 @@
       p[data-id]:hover {
         text-decoration: underline;
       }
-
-      div {
-        position: fixed;
-        right: -16px;
-        bottom: -16px;
-        width: 24px;
-        height: 48px;
-        cursor: nwse-resize;
-        transform: rotate(45deg);
-        z-index: 1;
-        background-color: var(--figma-color-bg);
-        background-image: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0px, rgba(0, 0, 0, 0.1) 1px, transparent 1px, transparent 3px);
-      }
     </style>
   </head>
 
   <body>
     <header>
-      <p class="tertiary">Click output to copy to clipboard</p>
+      <p class="tertiary" id="copy-hint">Click output to copy to clipboard</p>
 
       <fieldset>
         <input type="checkbox" id="checkbox" checked>
@@ -229,8 +281,12 @@
       </fieldset>
     </header>
 
-
     <textarea id="textarea" spellcheck="false"></textarea>
+
+    <menu>
+      <button id="back" type="button" title="Go back to previous node"></button>
+      <button id="refresh" type="button" title="Re-generate output"></button>
+    </menu>
 
     <summary>
       <p><strong>Issues</strong></p>
@@ -238,15 +294,17 @@
       <p class="tertiary">None found</p>
     </summary>
 
-    <div id="div"></div>
-
     <script src="placeholder.js"></script>
 
     <script>
       const textarea = document.getElementById("textarea")
       const summary = document.querySelector("summary")
       const checkbox = document.getElementById("checkbox")
-      const div = document.getElementById("div")
+      const refresh = document.getElementById("refresh")
+      const back = document.getElementById("back")
+      const copyHint = document.getElementById("copy-hint")
+      const copyHintDefault = copyHint.textContent
+      let copyHintTimeout
 
       // Mark a region while it is being scrolled; the mark is what fades its
       // scrollbar in, and it clears once scrolling has settled.
@@ -267,25 +325,28 @@
       revealScrollbarWhileScrolling(textarea)
       revealScrollbarWhileScrolling(summary)
 
-      const pointerMove = (e) => {
-        const size = {
-          w: Math.max(360, Math.floor(e.clientX + 16)),
-          h: Math.max(360, Math.floor(e.clientY + 16))
-        }
-
-        window.parent.postMessage({ pluginMessage: { type: "resize", size } }, "*")
+      const showCopied = () => {
+        copyHint.textContent = "Copied!"
+        clearTimeout(copyHintTimeout)
+        copyHintTimeout = setTimeout(() => {
+          copyHint.textContent = copyHintDefault
+        }, 1000)
       }
 
-      div.onpointerdown = (e) => {
-        e.preventDefault()
-        div.onpointermove = pointerMove
-        div.setPointerCapture(e.pointerId)
+      const copyOutput = () => {
+        const { selectionStart, selectionEnd } = textarea
+
+        textarea.focus()
+        textarea.select()
+        document.execCommand("copy")
+        textarea.setSelectionRange(selectionStart, selectionEnd)
+        showCopied()
       }
 
-      div.onpointerup = (e) => {
-        e.preventDefault()
-        div.onpointermove = null
-        div.releasePointerCapture(e.pointerId)
+      textarea.addEventListener("click", copyOutput)
+
+      const setLoading = () => {
+        textarea.value = "Loading…"
       }
 
       const applyOutputVisibility = () => {
@@ -293,18 +354,42 @@
         window.parent.postMessage({ pluginMessage: { type: "toggleOutput", showOutput: checkbox.checked } }, "*")
       }
 
-      checkbox.onchange = applyOutputVisibility
+      checkbox.onchange = () => {
+        setLoading()
+        applyOutputVisibility()
+      }
 
       applyOutputVisibility()
 
       textarea.value = window.placeholder
 
+      refresh.onclick = () => {
+        setLoading()
+        window.parent.postMessage({ pluginMessage: { type: "refresh" } }, "*")
+      }
+
+      back.onclick = () => {
+        setLoading()
+        window.parent.postMessage({ pluginMessage: { type: "back" } }, "*")
+      }
+
       summary.onclick = (e) => {
-        window.parent.postMessage({ pluginMessage: { selectNode: e.target.closest("p[data-id]")?.dataset.id } }, "*")
+        const id = e.target.closest("p[data-id]")?.dataset.id
+
+        if (!id) return
+
+        setLoading()
+        window.parent.postMessage({ pluginMessage: { selectNode: id } }, "*")
       }
 
       window.onmessage = (event) => {
-        const { output, warnings, errors } = event.data.pluginMessage
+        const { output, warnings, errors, loading } = event.data.pluginMessage
+
+        if (loading) {
+          textarea.value = "Loading…"
+
+          return
+        }
 
         let html = `<p><strong>Issues</strong></p>`
 
@@ -321,14 +406,6 @@
         }
 
         summary.innerHTML = html
-
-        textarea.onclick = () => {
-          textarea.focus()
-          textarea.select()
-
-          document.execCommand("copy")
-        }
-
         textarea.value = output
       }
     </script>

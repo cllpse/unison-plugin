@@ -9,32 +9,74 @@ figma.currentPage.setRelaunchData({ run: "Export a selected frame as React compo
 figma.showUI(__html__, { width: 480, height: 640, title: "Frame Plugin", themeColors: true })
 
 let showOutput = true
+const selectionHistory: string[] = []
+let currentSelectionId: string | null = null
+let restoringSelection = false
 
-figma.clientStorage
-  .getAsync("pluginSize")
-  .then((size) => {
-    if (size) {
-      figma.ui.resize(size.w, size.h)
-    }
-  })
-  .catch(() => {})
+const focusNode = async (id: string): Promise<boolean> => {
+  const node = await figma.getNodeByIdAsync(id)
 
-figma.ui.onmessage = async (msg: {
-  selectNode?: string
-  type?: string
-  size?: { w: number; h: number }
-  showOutput?: boolean
-}) => {
-  if (msg.type === "resize" && msg.size) {
-    figma.ui.resize(msg.size.w, msg.size.h)
-    figma.clientStorage.setAsync("pluginSize", msg.size).catch(() => {})
+  if (node && "visible" in node) {
+    figma.currentPage.selection = [node as SceneNode]
+    figma.viewport.scrollAndZoomIntoView([node])
+
+    return true
+  }
+
+  return false
+}
+
+const recordSelection = () => {
+  const id = figma.currentPage.selection[0]?.id ?? null
+
+  if (restoringSelection) {
+    restoringSelection = false
+    currentSelectionId = id
 
     return
   }
 
+  if (id === currentSelectionId) return
+
+  if (currentSelectionId) {
+    selectionHistory.push(currentSelectionId)
+  }
+
+  currentSelectionId = id
+}
+
+recordSelection()
+
+figma.ui.onmessage = async (msg: { selectNode?: string; type?: string; showOutput?: boolean }) => {
   if (msg.type === "toggleOutput") {
     showOutput = msg.showOutput ?? true
     runner()
+
+    return
+  }
+
+  if (msg.type === "refresh") {
+    runner()
+
+    return
+  }
+
+  if (msg.type === "back") {
+    while (selectionHistory.length > 0) {
+      const previousId = selectionHistory.pop()
+
+      if (!previousId) break
+
+      restoringSelection = true
+
+      if (await focusNode(previousId)) {
+        currentSelectionId = previousId
+
+        return
+      }
+
+      restoringSelection = false
+    }
 
     return
   }
@@ -43,20 +85,11 @@ figma.ui.onmessage = async (msg: {
 
   if (!id || id === "") return
 
-  const node = await figma.getNodeByIdAsync(id)
-
-  if (node && "visible" in node) {
-    figma.currentPage.selection = [node as SceneNode]
-    figma.viewport.scrollAndZoomIntoView([node])
-  }
+  await focusNode(id)
 }
 
 const runner = async () => {
-  figma.ui.postMessage({
-    output: "Working...",
-    warnings: [],
-    errors: [],
-  })
+  figma.ui.postMessage({ loading: true })
 
   const selection = figma.currentPage.selection
 
@@ -100,7 +133,10 @@ const runner = async () => {
   }
 }
 
-figma.on("selectionchange", runner)
+figma.on("selectionchange", () => {
+  recordSelection()
+  runner()
+})
 
 figma.loadAllPagesAsync().then(() => {
   figma.on("documentchange", runner)

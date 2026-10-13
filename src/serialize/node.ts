@@ -16,6 +16,10 @@ const shouldExcludeFromOutput = async (
   annotationCategories: Awaited<ReturnType<typeof figma.annotations.getAnnotationCategoriesAsync>>,
   getMainComponentCached: (instance: InstanceNode) => Promise<ComponentNode | null>,
 ): Promise<boolean> => {
+  if (!node.visible) {
+    return true
+  }
+
   if (hasExcludeFromOutputAnnotation(node.annotations, annotationCategories)) {
     return true
   }

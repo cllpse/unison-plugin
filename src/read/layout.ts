@@ -18,6 +18,10 @@ export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOr
     })
   } else {
     properties[map[node.layoutMode]] = true
+
+    if (node.layoutMode === "HORIZONTAL" && node.layoutWrap === "WRAP") {
+      properties.wrap = true
+    }
   }
 
   return { properties, errors, warnings: [] }
