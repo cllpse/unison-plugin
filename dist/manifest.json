@@ -1,5 +1,6 @@
 {
   "name": "Frame Plugin",
+  "id": "1691815551141309696",
   "api": "1.0.0",
   "main": "index.js",
   "ui": "index.html",
