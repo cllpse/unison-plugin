@@ -4,24 +4,17 @@
   "api": "1.0.0",
   "main": "index.js",
   "ui": "index.html",
-  "capabilities": [
-    "inspect"
-  ],
+  "capabilities": ["inspect"],
   "enableProposedApi": false,
   "documentAccess": "dynamic-page",
-  "editorType": [
-    "figma",
-    "dev"
-  ],
+  "editorType": ["figma", "dev"],
   "networkAccess": {
-    "allowedDomains": [
-      "none"
-    ]
+    "allowedDomains": ["none"]
   },
   "relaunchButtons": [
     {
       "command": "run",
-      "name": "Frame Plugin"
+      "name": "cllpse-figma"
     }
   ]
 }

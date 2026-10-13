@@ -862,14 +862,12 @@
 
   // src/read/cornerRadius.ts
   var hasDiscreteCorners = (node) => "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node;
-  var readDiscreteCorner = async (node, value, bound, prefix, label, properties, errors) => {
-    if (value <= 0) {
-      return;
-    }
-    if (bound === void 0) {
+  var unboundMessage = (node, label) => label ? "Error @ ".concat(node.name, " \u2013 CORNER RADIUS ").concat(label, " value is not bound to a variable.") : "Error @ ".concat(node.name, " \u2013 CORNER RADIUS value is not bound to a variable.");
+  var emitCorner = async (node, prefix, value, bound, properties, errors, label) => {
+    if (value > 0 && bound === void 0) {
       errors.push({
         nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 CORNER RADIUS ").concat(label, " value is not bound to a variable.")
+        message: unboundMessage(node, label)
       });
       return;
     }
@@ -878,75 +876,95 @@
       properties[className] = true;
     }
   };
+  var readDiscreteCorners = async (node) => {
+    var _a, _b, _c, _d, _e;
+    const properties = {};
+    const errors = [];
+    const corners = [
+      {
+        value: node.topLeftRadius,
+        bound: (_a = node.boundVariables) == null ? void 0 : _a.topLeftRadius,
+        prefix: "corner-radius-top-left-",
+        label: "top left"
+      },
+      {
+        value: node.topRightRadius,
+        bound: (_b = node.boundVariables) == null ? void 0 : _b.topRightRadius,
+        prefix: "corner-radius-top-right-",
+        label: "top right"
+      },
+      {
+        value: node.bottomLeftRadius,
+        bound: (_c = node.boundVariables) == null ? void 0 : _c.bottomLeftRadius,
+        prefix: "corner-radius-bottom-left-",
+        label: "bottom left"
+      },
+      {
+        value: node.bottomRightRadius,
+        bound: (_d = node.boundVariables) == null ? void 0 : _d.bottomRightRadius,
+        prefix: "corner-radius-bottom-right-",
+        label: "bottom right"
+      }
+    ];
+    const counts = /* @__PURE__ */ new Map();
+    for (const corner of corners) {
+      counts.set(corner.value, ((_e = counts.get(corner.value)) != null ? _e : 0) + 1);
+    }
+    let baseValue = corners[0].value;
+    let baseCount = 0;
+    for (const [value, count] of counts) {
+      if (count > baseCount) {
+        baseValue = value;
+        baseCount = count;
+      }
+    }
+    if (baseCount === 4) {
+      if (baseValue > 0) {
+        if (corners.some((corner) => corner.bound === void 0)) {
+          errors.push({
+            nodeId: node.id,
+            message: unboundMessage(node)
+          });
+        } else {
+          await emitCorner(node, "corner-radius-", baseValue, corners[0].bound, properties, errors);
+        }
+      }
+      return { properties, errors, warnings: [] };
+    }
+    const base = corners.find((corner) => corner.value === baseValue);
+    const useBase = baseCount >= 2 && baseValue > 0 && base !== void 0;
+    if (useBase) {
+      await emitCorner(node, "corner-radius-", baseValue, base.bound, properties, errors);
+      for (const corner of corners) {
+        if (corner.value === baseValue) {
+          continue;
+        }
+        await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
+      }
+    } else {
+      for (const corner of corners) {
+        if (corner.value <= 0) {
+          continue;
+        }
+        await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
+      }
+    }
+    return { properties, errors, warnings: [] };
+  };
   var readCornerRadius = async (node) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    var _a;
+    if (hasDiscreteCorners(node)) {
+      return readDiscreteCorners(node);
+    }
     const properties = {};
     const errors = [];
     if (node.cornerRadius === figma.mixed) {
-      if (!hasDiscreteCorners(node)) {
-        errors.push({
-          nodeId: node.id,
-          message: "Error @ ".concat(node.name, " \u2013 CORNER RADIUS values cannot be mixed.")
-        });
-      } else {
-        await readDiscreteCorner(
-          node,
-          node.topLeftRadius,
-          (_a = node.boundVariables) == null ? void 0 : _a.topLeftRadius,
-          "corner-radius-top-left-",
-          "top left",
-          properties,
-          errors
-        );
-        await readDiscreteCorner(
-          node,
-          node.topRightRadius,
-          (_b = node.boundVariables) == null ? void 0 : _b.topRightRadius,
-          "corner-radius-top-right-",
-          "top right",
-          properties,
-          errors
-        );
-        await readDiscreteCorner(
-          node,
-          node.bottomLeftRadius,
-          (_c = node.boundVariables) == null ? void 0 : _c.bottomLeftRadius,
-          "corner-radius-bottom-left-",
-          "bottom left",
-          properties,
-          errors
-        );
-        await readDiscreteCorner(
-          node,
-          node.bottomRightRadius,
-          (_d = node.boundVariables) == null ? void 0 : _d.bottomRightRadius,
-          "corner-radius-bottom-right-",
-          "bottom right",
-          properties,
-          errors
-        );
-      }
+      errors.push({
+        nodeId: node.id,
+        message: "Error @ ".concat(node.name, " \u2013 CORNER RADIUS values cannot be mixed.")
+      });
     } else if (node.cornerRadius > 0) {
-      if ([
-        (_e = node.boundVariables) == null ? void 0 : _e.topLeftRadius,
-        (_f = node.boundVariables) == null ? void 0 : _f.topRightRadius,
-        (_g = node.boundVariables) == null ? void 0 : _g.bottomLeftRadius,
-        (_h = node.boundVariables) == null ? void 0 : _h.bottomRightRadius
-      ].includes(void 0)) {
-        errors.push({
-          nodeId: node.id,
-          message: "Error @ ".concat(node.name, " \u2013 CORNER RADIUS value is not bound to a variable.")
-        });
-      } else {
-        const className = await resolveBoundUnitClass(
-          "corner-radius-",
-          (_i = node.boundVariables) == null ? void 0 : _i.topLeftRadius,
-          node.cornerRadius
-        );
-        if (className) {
-          properties[className] = true;
-        }
-      }
+      await emitCorner(node, "corner-radius-", node.cornerRadius, (_a = node.boundVariables) == null ? void 0 : _a.topLeftRadius, properties, errors);
     }
     return { properties, errors, warnings: [] };
   };
@@ -990,6 +1008,9 @@
       });
     } else {
       properties[map[node.layoutMode]] = true;
+      if (node.layoutMode === "HORIZONTAL" && node.layoutWrap === "WRAP") {
+        properties.wrap = true;
+      }
     }
     return { properties, errors, warnings: [] };
   };
@@ -1266,6 +1287,9 @@
 
   // src/serialize/node.ts
   var shouldExcludeFromOutput = async (node, annotationCategories, getMainComponentCached) => {
+    if (!node.visible) {
+      return true;
+    }
     if (hasExcludeFromOutputAnnotation(node.annotations, annotationCategories)) {
       return true;
     }
@@ -1372,39 +1396,63 @@
   figma.currentPage.setRelaunchData({ run: "Export a selected frame as React component code" });
   figma.showUI(__html__, { width: 480, height: 640, title: "Frame Plugin", themeColors: true });
   var showOutput = true;
-  figma.clientStorage.getAsync("pluginSize").then((size) => {
-    if (size) {
-      figma.ui.resize(size.w, size.h);
+  var selectionHistory = [];
+  var currentSelectionId = null;
+  var restoringSelection = false;
+  var focusNode = async (id) => {
+    const node = await figma.getNodeByIdAsync(id);
+    if (node && "visible" in node) {
+      figma.currentPage.selection = [node];
+      figma.viewport.scrollAndZoomIntoView([node]);
+      return true;
     }
-  }).catch(() => {
-  });
-  figma.ui.onmessage = async (msg) => {
-    var _a;
-    if (msg.type === "resize" && msg.size) {
-      figma.ui.resize(msg.size.w, msg.size.h);
-      figma.clientStorage.setAsync("pluginSize", msg.size).catch(() => {
-      });
+    return false;
+  };
+  var recordSelection = () => {
+    var _a, _b;
+    const id = (_b = (_a = figma.currentPage.selection[0]) == null ? void 0 : _a.id) != null ? _b : null;
+    if (restoringSelection) {
+      restoringSelection = false;
+      currentSelectionId = id;
       return;
     }
+    if (id === currentSelectionId) return;
+    if (currentSelectionId) {
+      selectionHistory.push(currentSelectionId);
+    }
+    currentSelectionId = id;
+  };
+  recordSelection();
+  figma.ui.onmessage = async (msg) => {
+    var _a;
     if (msg.type === "toggleOutput") {
       showOutput = (_a = msg.showOutput) != null ? _a : true;
       runner();
       return;
     }
+    if (msg.type === "refresh") {
+      runner();
+      return;
+    }
+    if (msg.type === "back") {
+      while (selectionHistory.length > 0) {
+        const previousId = selectionHistory.pop();
+        if (!previousId) break;
+        restoringSelection = true;
+        if (await focusNode(previousId)) {
+          currentSelectionId = previousId;
+          return;
+        }
+        restoringSelection = false;
+      }
+      return;
+    }
     const id = msg.selectNode;
     if (!id || id === "") return;
-    const node = await figma.getNodeByIdAsync(id);
-    if (node && "visible" in node) {
-      figma.currentPage.selection = [node];
-      figma.viewport.scrollAndZoomIntoView([node]);
-    }
+    await focusNode(id);
   };
   var runner = async () => {
-    figma.ui.postMessage({
-      output: "Working...",
-      warnings: [],
-      errors: []
-    });
+    figma.ui.postMessage({ loading: true });
     const selection = figma.currentPage.selection;
     if (selection.length > 0) {
       const warnings = [];
@@ -1438,7 +1486,10 @@
       });
     }
   };
-  figma.on("selectionchange", runner);
+  figma.on("selectionchange", () => {
+    recordSelection();
+    runner();
+  });
   figma.loadAllPagesAsync().then(() => {
     figma.on("documentchange", runner);
   });
