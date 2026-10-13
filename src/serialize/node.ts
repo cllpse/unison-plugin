@@ -1,8 +1,5 @@
 import type { PropertiesErrorOrWarning } from "../types"
-import {
-  getMainDefinitionLayerForNode,
-  hasExcludeFromOutputAnnotation,
-} from "./annotationExclude"
+import { getMainDefinitionLayerForNode, hasExcludeFromOutputAnnotation } from "./annotationExclude"
 import { serializeEllipse } from "./ellipse"
 import { serializeFrame } from "./frame"
 import { serializeGroup } from "./group"
@@ -71,11 +68,7 @@ const _node = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
         return serializeVector(node.children[1])
       }
       // matches Google Material Design icons: a group of [Vector path, Rectangle]
-      if (
-        node.children.length === 2 &&
-        node.children[0]?.type === "VECTOR" &&
-        node.children[1]?.type === "RECTANGLE"
-      ) {
+      if (node.children.length === 2 && node.children[0]?.type === "VECTOR" && node.children[1]?.type === "RECTANGLE") {
         return serializeVector(node.children[0])
       }
       return serializeGroup(node)
