@@ -1,0 +1,26 @@
+{
+  "name": "Frame Plugin",
+  "api": "1.0.0",
+  "main": "index.js",
+  "ui": "index.html",
+  "capabilities": [
+    "inspect"
+  ],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "editorType": [
+    "figma",
+    "dev"
+  ],
+  "networkAccess": {
+    "allowedDomains": [
+      "none"
+    ]
+  },
+  "relaunchButtons": [
+    {
+      "command": "run",
+      "name": "Frame Plugin"
+    }
+  ]
+}

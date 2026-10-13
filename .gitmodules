@@ -1,0 +1,3 @@
+[submodule "figma"]
+	path = figma
+	url = git@github.com:cllpse/figma.git

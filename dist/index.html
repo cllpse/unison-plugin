@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+
+    <style>
+      *, ::before, ::after {
+        box-sizing: border-box;
+        user-select: none;
+      }
+
+      html {
+        height: 100%;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        /* The window is a fixed frame: every scrollable region is a child, so the
+           page itself never grows a scrollbar of its own. */
+        overflow: hidden;
+        background-color: var(--figma-color-bg);
+      }
+
+      body, input[type="checkbox"]::after {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        font-size: 12px;
+        line-height: calc(12px * 1.5);
+        color: var(--figma-color-text);
+      }
+
+      header {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+        padding: 12px;
+        gap: 4px;
+        border: none;
+        background-color: var(--figma-color-bg);
+        border-bottom: 1px solid var(--figma-color-border);
+      }
+
+      fieldset {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        flex-shrink: 0;
+        gap: 4px;
+        padding: 0;
+        border: none;
+      }
+
+      input[type="checkbox"] {
+        position: relative;
+        appearance: none;
+        -webkit-appearance: none;
+        width: 16px;
+        height: 16px;
+        border: 1px solid var(--figma-color-border);
+        border-radius: 4px;
+        background-color: var(--figma-color-bg-hover);
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+
+      input[type="checkbox"]:checked::after {
+        content: "✓";
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        opacity: 0.9;
+      }
+
+      label {
+        cursor: pointer;
+      }
+
+      textarea {
+        flex: 1 1 50%;
+        min-height: 0;
+        width: 100%;
+        border: none;
+        outline: none;
+        padding: 12px;
+        resize: none;
+        font-family: monospace;
+        font-size: inherit;
+        line-height: inherit;
+        background-color: var(--figma-color-bg-secondary);
+        user-select: text;
+        border-bottom: 1px solid var(--figma-color-border);
+        white-space: nowrap;
+      }
+
+      summary {
+        display: flex;
+        flex-direction: column;
+        flex: 0 1 auto;
+        min-height: 0;
+        max-height: 50%;
+        overflow: hidden auto;
+        padding: 12px;
+        gap: 4px;
+      }
+
+      /* With the output pane hidden the issues list is the only flexible child,
+         so it takes the whole frame. */
+      body.output-hidden textarea {
+        display: none;
+      }
+
+      body.output-hidden summary {
+        flex: 1 1 auto;
+        max-height: none;
+      }
+
+      /* Scrollbars are overlay-ish: the gutter is reserved so revealing a thumb
+         never reflows the content, but track and thumb stay transparent until
+         the region is actually scrolled (or pointed at). */
+      textarea,
+      summary {
+        scrollbar-gutter: stable;
+      }
+
+      textarea::-webkit-scrollbar,
+      summary::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+
+      textarea::-webkit-scrollbar-track,
+      textarea::-webkit-scrollbar-corner,
+      summary::-webkit-scrollbar-track,
+      summary::-webkit-scrollbar-corner {
+        background-color: transparent;
+      }
+
+      textarea::-webkit-scrollbar-thumb,
+      summary::-webkit-scrollbar-thumb {
+        /* A 4px pill, inset from the edges by the transparent border. */
+        border: 3px solid transparent;
+        border-radius: 999px;
+        background-color: transparent;
+        background-clip: padding-box;
+        transition: background-color 150ms ease-out;
+      }
+
+      textarea[data-scrolling]::-webkit-scrollbar-thumb,
+      textarea:hover::-webkit-scrollbar-thumb,
+      summary[data-scrolling]::-webkit-scrollbar-thumb,
+      summary:hover::-webkit-scrollbar-thumb {
+        background-color: var(--figma-color-text-tertiary);
+      }
+
+      textarea::-webkit-scrollbar-thumb:hover,
+      textarea::-webkit-scrollbar-thumb:active,
+      summary::-webkit-scrollbar-thumb:hover,
+      summary::-webkit-scrollbar-thumb:active {
+        background-color: var(--figma-color-text-secondary);
+      }
+
+      p, label, input[type="checkbox"]::after {
+        display: inline;
+        width: fit-content;
+        margin: 0;
+        font-size: inherit;
+        font-family: inherit;
+        line-height: inherit;
+      }
+
+      p:not(:first-child):not(:last-child) {
+        margin-top: 2px;
+        margin-bottom: 2px;
+      }
+
+      p.warning {
+        color: var(--figma-color-text-brand);
+      }
+
+      p.danger {
+        color: var(--figma-color-text-danger);
+      }
+
+      p.tertiary {
+        color: var(--figma-color-text-tertiary);
+      }
+
+      p[data-id],
+      p[data-id] {
+        cursor: pointer;
+      }
+
+      p[data-id]:hover,
+      p[data-id]:hover {
+        text-decoration: underline;
+      }
+
+      div {
+        position: fixed;
+        right: -16px;
+        bottom: -16px;
+        width: 24px;
+        height: 48px;
+        cursor: nwse-resize;
+        transform: rotate(45deg);
+        z-index: 1;
+        background-color: var(--figma-color-bg);
+        background-image: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0px, rgba(0, 0, 0, 0.1) 1px, transparent 1px, transparent 3px);
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <p class="tertiary">Click output to copy to clipboard</p>
+
+      <fieldset>
+        <input type="checkbox" id="checkbox" checked>
+        <label for="checkbox">Show output</label>
+      </fieldset>
+    </header>
+
+
+    <textarea id="textarea" spellcheck="false"></textarea>
+
+    <summary>
+      <p><strong>Issues</strong></p>
+
+      <p class="tertiary">None found</p>
+    </summary>
+
+    <div id="div"></div>
+
+    <script src="placeholder.js"></script>
+
+    <script>
+      const textarea = document.getElementById("textarea")
+      const summary = document.querySelector("summary")
+      const checkbox = document.getElementById("checkbox")
+      const div = document.getElementById("div")
+
+      // Mark a region while it is being scrolled; the mark is what fades its
+      // scrollbar in, and it clears once scrolling has settled.
+      const revealScrollbarWhileScrolling = (el) => {
+        let timer = 0
+
+        el.addEventListener("scroll", () => {
+          el.dataset.scrolling = ""
+
+          clearTimeout(timer)
+
+          timer = setTimeout(() => {
+            delete el.dataset.scrolling
+          }, 600)
+        }, { passive: true })
+      }
+
+      revealScrollbarWhileScrolling(textarea)
+      revealScrollbarWhileScrolling(summary)
+
+      const pointerMove = (e) => {
+        const size = {
+          w: Math.max(360, Math.floor(e.clientX + 16)),
+          h: Math.max(360, Math.floor(e.clientY + 16))
+        }
+
+        window.parent.postMessage({ pluginMessage: { type: "resize", size } }, "*")
+      }
+
+      div.onpointerdown = (e) => {
+        e.preventDefault()
+        div.onpointermove = pointerMove
+        div.setPointerCapture(e.pointerId)
+      }
+
+      div.onpointerup = (e) => {
+        e.preventDefault()
+        div.onpointermove = null
+        div.releasePointerCapture(e.pointerId)
+      }
+
+      const applyOutputVisibility = () => {
+        document.body.classList.toggle("output-hidden", !checkbox.checked)
+        window.parent.postMessage({ pluginMessage: { type: "toggleOutput", showOutput: checkbox.checked } }, "*")
+      }
+
+      checkbox.onchange = applyOutputVisibility
+
+      applyOutputVisibility()
+
+      textarea.value = window.placeholder
+
+      summary.onclick = (e) => {
+        window.parent.postMessage({ pluginMessage: { selectNode: e.target.closest("p[data-id]")?.dataset.id } }, "*")
+      }
+
+      window.onmessage = (event) => {
+        const { output, warnings, errors } = event.data.pluginMessage
+
+        let html = `<p><strong>Issues</strong></p>`
+
+        if (warnings.length === 0 && errors.length === 0) {
+          html += `<p class="tertiary">None found</p>`
+        }
+
+        for (const e of errors) {
+          html += `<p class="danger" data-id="${e.nodeId}">${e.message}</p>`
+        }
+
+        for (const w of warnings) {
+          html += `<p class="warning" data-id="${w.nodeId}">${w.message}</p>`
+        }
+
+        summary.innerHTML = html
+
+        textarea.onclick = () => {
+          textarea.focus()
+          textarea.select()
+
+          document.execCommand("copy")
+        }
+
+        textarea.value = output
+      }
+    </script>
+  </body>
+</html>

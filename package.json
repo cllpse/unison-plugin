@@ -1,0 +1,20 @@
+{
+  "name": "frame-plugin",
+  "version": "1.0.0",
+  "description": "README",
+  "main": "dist/code.js",
+  "type": "module",
+  "scripts": {
+    "build:typescript": "esbuild src/index.ts --bundle --outfile=dist/index.js --target=chrome58",
+    "build:files": "cp -r ./src/manifest.json ./dist/manifest.json && cp -r ./src/index.html ./dist/index.html && cp -r ./src/placeholder.js ./dist/placeholder.js",
+    "build": "npm run build:typescript && npm run build:files",
+    "watch": "node --watch-path=./src watch.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@biomejs/biome": "2.4.4",
+    "@figma/plugin-typings": "^1.123.0",
+    "esbuild": "0.27.3"
+  }
+}
