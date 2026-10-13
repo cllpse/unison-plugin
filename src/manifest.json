@@ -21,7 +21,7 @@
   "relaunchButtons": [
     {
       "command": "run",
-      "name": "Frame Plugin"
+      "name": "cllpse-figma"
     }
   ]
 }
