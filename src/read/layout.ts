@@ -1,4 +1,4 @@
-import type { FigmaFrameFlow } from "../../figma/src/types/FigmaProperties"
+import type { FigmaFrameFlow } from "../../figma/src/types/figmaProperties"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
 
 const map: Record<string, keyof FigmaFrameFlow> = {

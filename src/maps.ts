@@ -1,6 +1,5 @@
 import { COLORS } from "../figma/src/constants/colors"
-import { FIGMA_UNITS } from "../figma/src/constants/figmaUnits"
-import { UNITS } from "../figma/src/constants/units"
+import { UNITS, UNITS_FIGMA } from "../figma/src/constants/units"
 import type {
   FigmaFill,
   FigmaFrameCornerRadius,
@@ -19,7 +18,7 @@ import type {
   FigmaPaddingTop,
   FigmaPaddingVertical,
   FigmaStroke,
-} from "../figma/src/types/FigmaProperties"
+} from "../figma/src/types/figmaProperties"
 import type { HEX } from "./types"
 import { isHEX } from "./utilities"
 
@@ -139,12 +138,12 @@ export const mapFillColor = buildColorMap<keyof FigmaFill>("fill-")
 const DEPRECATED_UNITS = new Set(["05"])
 
 const UNIT_TOKENS = new Set(
-  [...Object.keys(UNITS), ...Object.keys(FIGMA_UNITS)].filter((unit) => !DEPRECATED_UNITS.has(unit)),
+  [...Object.keys(UNITS), ...Object.keys(UNITS_FIGMA)].filter((unit) => !DEPRECATED_UNITS.has(unit)),
 )
 
 const PIXEL_TO_TOKEN: Record<number, string> = {}
 
-for (const [unit, pixels] of Object.entries({ ...UNITS, ...FIGMA_UNITS })) {
+for (const [unit, pixels] of Object.entries({ ...UNITS, ...UNITS_FIGMA })) {
   if (typeof pixels !== "number" || DEPRECATED_UNITS.has(unit)) {
     continue
   }
@@ -212,7 +211,7 @@ const buildUnitMap = <ClassName extends string>(prefix: string): Record<number, 
 const buildSizingMap = <ClassName extends string>(prefix: string): Record<string, ClassName> => {
   const map: Record<string, ClassName> = {}
 
-  for (const [unit, pixels] of Object.entries({ ...UNITS, ...FIGMA_UNITS })) {
+  for (const [unit, pixels] of Object.entries({ ...UNITS, ...UNITS_FIGMA })) {
     if (typeof pixels === "number") {
       continue
     }
