@@ -1,5 +1,5 @@
-import { COLORS } from "../figma/src/constants/colors"
-import { UNITS, UNITS_FIGMA } from "../figma/src/constants/units"
+import { COLORS } from "../unison-components/src/constants/colors"
+import { UNITS, UNITS_FIGMA } from "../unison-components/src/constants/units"
 import type {
   FigmaFill,
   FigmaFrameCornerRadius,
@@ -18,7 +18,7 @@ import type {
   FigmaPaddingTop,
   FigmaPaddingVertical,
   FigmaStroke,
-} from "../figma/src/types/figmaProperties"
+} from "../unison-components/src/types/figmaProperties"
 import type { HEX } from "./types"
 import { isHEX } from "./utilities"
 

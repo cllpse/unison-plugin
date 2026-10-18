@@ -1,4 +1,4 @@
-import type { FigmaFrameAlignment, FigmaTypographyAlignment } from "../../figma/src/types/figmaProperties"
+import type { FigmaFrameAlignment, FigmaTypographyAlignment } from "../../unison-components/src/types/figmaProperties"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
 
 const mapFrame: Record<string, keyof FigmaFrameAlignment> = {

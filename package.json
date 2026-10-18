@@ -5,10 +5,10 @@
   "main": "dist/code.js",
   "type": "module",
   "scripts": {
-    "build:typescript": "esbuild src/index.ts --bundle --outfile=dist/index.js --target=chrome58",
-    "build:files": "cp -r ./src/manifest.json ./dist/manifest.json && cp -r ./src/index.html ./dist/index.html && cp -r ./src/placeholder.js ./dist/placeholder.js",
-    "build": "npm run build:typescript && npm run build:files",
-    "watch": "node --watch-path=./src watch.js"
+    "plugin:build:typescript": "esbuild src/index.ts --bundle --outfile=dist/index.js --target=chrome58",
+    "plugin:build:files": "cp -r ./src/manifest.json ./dist/manifest.json && cp -r ./src/index.html ./dist/index.html && cp -r ./src/placeholder.js ./dist/placeholder.js",
+    "plugin:build": "npm run plugin:build:typescript && npm run plugin:build:files",
+    "plugin:watch": "node --watch-path=./src watch.js"
   },
   "author": "",
   "license": "ISC",
