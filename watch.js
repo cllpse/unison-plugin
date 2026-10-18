@@ -1,7 +1,9 @@
-import { execSync } from "node:child_process"
+import { watch } from "node:fs"
 
-const run = () => {
-  execSync("npm run plugin:build", { stdio: "inherit" })
+const build = () => {
+  Bun.spawnSync(["bun", "run", "plugin:build"], { stdio: ["inherit", "inherit", "inherit"] })
 }
 
-run()
+build()
+
+watch("./src", { recursive: true }, build)

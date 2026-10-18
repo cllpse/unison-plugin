@@ -7,14 +7,21 @@
   "scripts": {
     "plugin:build:typescript": "esbuild src/index.ts --bundle --outfile=dist/index.js --target=chrome58",
     "plugin:build:files": "cp -r ./src/manifest.json ./dist/manifest.json && cp -r ./src/index.html ./dist/index.html && cp -r ./src/placeholder.js ./dist/placeholder.js",
-    "plugin:build": "npm run plugin:build:typescript && npm run plugin:build:files",
-    "plugin:watch": "node --watch-path=./src watch.js"
+    "plugin:build": "bun run plugin:build:typescript && bun run plugin:build:files",
+    "plugin:watch": "bun watch.js",
+    "lint": "biome check",
+    "format": "biome format --write",
+    "typecheck": "tsc --noEmit"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@biomejs/biome": "2.4.4",
+    "@biomejs/biome": "2.5.15",
     "@figma/plugin-typings": "^1.123.0",
-    "esbuild": "0.27.3"
-  }
+    "@types/react": "^19.3.0",
+    "esbuild": "0.27.3",
+    "react-native": "^0.87.1",
+    "typescript": "^5"
+  },
+  "packageManager": "bun@1.4.3"
 }
