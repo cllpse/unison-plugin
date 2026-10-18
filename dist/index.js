@@ -107,7 +107,7 @@
     return def;
   };
 
-  // figma/src/constants/colors.ts
+  // unison-components/src/constants/colors.ts
   var COLORS = {
     currentcolor: "currentColor",
     transparent: "transparent",
@@ -250,7 +250,7 @@
     }
   };
 
-  // figma/src/constants/units.ts
+  // unison-components/src/constants/units.ts
   var UNITS = {
     /**
      * 0, 0rem, 0px
@@ -365,6 +365,9 @@
   };
   var INDENT = " ".repeat(4);
   var META_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "children", "characters"]);
+  var STRING_PROP_KEYS = {
+    Vector: ["path", "viewBox", "fillRule"]
+  };
   var SKIP_WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
   var _booleanPropKeys = (properties) => Object.keys(properties).filter((k) => !META_KEYS.has(k) && !k.startsWith("OVERRIDE_") && properties[k] === true);
   var _openTagPropKeys = (tag, properties) => {
@@ -381,7 +384,10 @@
     return [...rest];
   };
   var _formatOpenTag = (tag, properties, indentation, selfClosing) => {
-    const keys = _openTagPropKeys(tag, properties).sort((a, b) => a.localeCompare(b));
+    var _a;
+    const flags = _openTagPropKeys(tag, properties).sort((a, b) => a.localeCompare(b));
+    const attributes = ((_a = STRING_PROP_KEYS[tag]) != null ? _a : []).filter((k) => typeof properties[k] === "string").map((k) => "".concat(k, '="').concat(properties[k], '"'));
+    const keys = [...flags, ...attributes];
     if (keys.length === 0) {
       return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
     }
@@ -394,7 +400,7 @@
   };
   var _resolveTag = (properties) => {
     if (properties.type === "TEXT") return "Text";
-    if (properties.type === "VECTOR") return "Icon";
+    if (properties.type === "VECTOR") return "Vector";
     if (properties.type === "ELLIPSE") return "Ellipse";
     if (properties.type === "RECTANGLE") return "Rectangle";
     return "Frame";
@@ -429,16 +435,13 @@
       }
       return parts2.filter((p) => p.length > 0).join("\n");
     }
-    const selfClosing = tag === "Ellipse" || tag === "Rectangle";
+    const selfClosing = tag === "Ellipse" || tag === "Rectangle" || tag === "Vector";
     const open = _formatOpenTag(tag, properties, indentation, selfClosing);
     if (selfClosing) {
       return open;
     }
     if (tag === "Text") {
       return [open, "".concat(indentation).concat(INDENT).concat(properties.characters), "".concat(indentation, "</Text>")].join("\n");
-    }
-    if (tag === "Icon") {
-      return [open, "".concat(indentation).concat(INDENT).concat(properties.name), "".concat(indentation, "</Icon>")].join("\n");
     }
     const parts = [open];
     for (const child of children) {
@@ -1274,14 +1277,53 @@
   };
 
   // src/serialize/vector.ts
-  var serializeVector = async (node) => {
-    const dimensions = await readDimensions(node);
+  var _round = (n) => String(Math.round(n * 100) / 100);
+  var _roundPath = (data) => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (n) => _round(Number(n)));
+  var serializeVector = async (node, box = node) => {
     const fill = await readFill(node);
-    const errors = fill.errors;
+    const errors = [...fill.errors];
+    const geometry = node.fillGeometry.length > 0 ? node.fillGeometry : node.vectorPaths;
+    if (geometry.length === 0) {
+      errors.push({
+        nodeId: node.id,
+        message: "Error @ ".concat(node.name, " \u2013 VECTOR has no path data.")
+      });
+    }
+    const bound = "boundVariables" in box ? box.boundVariables : void 0;
+    const width = (bound == null ? void 0 : bound.width) ? await resolveBoundUnitClass("width-", bound.width, box.width) : void 0;
+    const height = (bound == null ? void 0 : bound.height) ? await resolveBoundUnitClass("height-", bound.height, box.height) : void 0;
+    if (!(bound == null ? void 0 : bound.width)) {
+      errors.push({
+        nodeId: box.id,
+        message: "Error @ ".concat(box.name, " \u2013 WIDTH value is not bound to a variable.")
+      });
+    } else if (width === void 0) {
+      errors.push({
+        nodeId: box.id,
+        message: "Error @ ".concat(box.name, " \u2013 WIDTH variable does not match a unit token.")
+      });
+    }
+    if (!(bound == null ? void 0 : bound.height)) {
+      errors.push({
+        nodeId: box.id,
+        message: "Error @ ".concat(box.name, " \u2013 HEIGHT value is not bound to a variable.")
+      });
+    } else if (height === void 0) {
+      errors.push({
+        nodeId: box.id,
+        message: "Error @ ".concat(box.name, " \u2013 HEIGHT variable does not match a unit token.")
+      });
+    }
+    const minX = box === node ? 0 : box.x - node.x;
+    const minY = box === node ? 0 : box.y - node.y;
     return {
-      properties: __spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), dimensions.properties), fill.properties),
+      properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), fill.properties), width ? { [width]: true } : {}), height ? { [height]: true } : {}), {
+        path: geometry.map((g) => _roundPath(g.data)).join(" "),
+        viewBox: [minX, minY, box.width, box.height].map(_round).join(" "),
+        fillRule: geometry.some((g) => g.windingRule === "EVENODD") ? "evenodd" : void 0
+      }),
       errors,
-      warnings: []
+      warnings: fill.warnings
     };
   };
 
@@ -1325,10 +1367,10 @@
         return serializeFrame(node);
       case "GROUP": {
         if (((_a = node.children[0]) == null ? void 0 : _a.name) === "Bounding box" && ((_b = node.children[1]) == null ? void 0 : _b.type) === "VECTOR") {
-          return serializeVector(node.children[1]);
+          return serializeVector(node.children[1], node);
         }
         if (node.children.length === 2 && ((_c = node.children[0]) == null ? void 0 : _c.type) === "VECTOR" && ((_d = node.children[1]) == null ? void 0 : _d.type) === "RECTANGLE") {
-          return serializeVector(node.children[0]);
+          return serializeVector(node.children[0], node);
         }
         return serializeGroup(node);
       }
@@ -1371,7 +1413,7 @@
       }
       const r2 = await _node(node);
       const children = "children" in node ? node.children : [];
-      if (children.length > 0 && !("OVERRIDE_ICON_NAME" in r2.properties) && !("OVERRIDE_TEXT_CONTENT" in r2.properties)) {
+      if (r2.properties.type !== "VECTOR" && children.length > 0 && !("OVERRIDE_TEXT_CONTENT" in r2.properties)) {
         r2.properties.children = await Promise.all(
           children.map((child) => {
             const id = child.id;
