@@ -17,6 +17,11 @@ const INDENT = ` `.repeat(4)
 
 const META_KEYS = new Set(["id", "type", "name", "children", "characters"])
 
+/** String props rendered as `key="value"` attributes, in this order, after the boolean flags. */
+const STRING_PROP_KEYS: Record<string, string[]> = {
+  Vector: ["path", "viewBox", "fillRule"],
+}
+
 const SKIP_WRAPPER_TYPES = new Set(["INSTANCE", "COMPONENT", "SLOT"])
 
 const _booleanPropKeys = (properties: Record<string, unknown>): string[] =>
@@ -43,7 +48,11 @@ const _formatOpenTag = (
   indentation: string,
   selfClosing: boolean,
 ): string => {
-  const keys = _openTagPropKeys(tag, properties).sort((a, b) => a.localeCompare(b))
+  const flags = _openTagPropKeys(tag, properties).sort((a, b) => a.localeCompare(b))
+  const attributes = (STRING_PROP_KEYS[tag] ?? [])
+    .filter((k) => typeof properties[k] === "string")
+    .map((k) => `${k}="${properties[k]}"`)
+  const keys = [...flags, ...attributes]
 
   if (keys.length === 0) {
     return selfClosing ? `${indentation}<${tag} />` : `${indentation}<${tag}>`
@@ -59,7 +68,7 @@ const _formatOpenTag = (
 
 const _resolveTag = (properties: Record<string, unknown>): string => {
   if (properties.type === "TEXT") return "Text"
-  if (properties.type === "VECTOR") return "Icon"
+  if (properties.type === "VECTOR") return "Vector"
   if (properties.type === "ELLIPSE") return "Ellipse"
   if (properties.type === "RECTANGLE") return "Rectangle"
 
@@ -103,7 +112,7 @@ const _renderComponentNode = (node: PropertiesErrorOrWarning, indentation: strin
     return parts.filter((p) => p.length > 0).join("\n")
   }
 
-  const selfClosing = tag === "Ellipse" || tag === "Rectangle"
+  const selfClosing = tag === "Ellipse" || tag === "Rectangle" || tag === "Vector"
 
   const open = _formatOpenTag(tag, properties, indentation, selfClosing)
 
@@ -113,10 +122,6 @@ const _renderComponentNode = (node: PropertiesErrorOrWarning, indentation: strin
 
   if (tag === "Text") {
     return [open, `${indentation}${INDENT}${properties.characters}`, `${indentation}</Text>`].join("\n")
-  }
-
-  if (tag === "Icon") {
-    return [open, `${indentation}${INDENT}${properties.name}`, `${indentation}</Icon>`].join("\n")
   }
 
   const parts: string[] = [open]

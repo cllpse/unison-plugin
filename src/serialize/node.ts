@@ -65,11 +65,11 @@ const _node = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
     case "GROUP": {
       // matches Material Symbols plugin inserts
       if (node.children[0]?.name === "Bounding box" && node.children[1]?.type === "VECTOR") {
-        return serializeVector(node.children[1])
+        return serializeVector(node.children[1], node)
       }
       // matches Google Material Design icons: a group of [Vector path, Rectangle]
       if (node.children.length === 2 && node.children[0]?.type === "VECTOR" && node.children[1]?.type === "RECTANGLE") {
-        return serializeVector(node.children[0])
+        return serializeVector(node.children[0], node)
       }
       return serializeGroup(node)
     }
@@ -118,7 +118,8 @@ export const serializeNode = async (root: SceneNode): Promise<PropertiesErrorOrW
 
     const children = "children" in node ? node.children : []
 
-    if (children.length > 0 && !("OVERRIDE_ICON_NAME" in r.properties) && !("OVERRIDE_TEXT_CONTENT" in r.properties)) {
+    // A vector is a leaf: an icon group serialized as a vector already holds its glyph, so its layers are not children.
+    if (r.properties.type !== "VECTOR" && children.length > 0 && !("OVERRIDE_TEXT_CONTENT" in r.properties)) {
       r.properties.children = await Promise.all(
         children.map((child) => {
           const id = child.id
