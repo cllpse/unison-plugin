@@ -1,6 +1,7 @@
 import { readAlignmentFrame } from "../read/alignment"
 import { readCornerRadius } from "../read/cornerRadius"
 import { readDimensions } from "../read/dimensions"
+import { readEffect } from "../read/effect"
 import { readFill } from "../read/fill"
 import { readGap } from "../read/gap"
 import { readIdentity } from "../read/identity"
@@ -13,6 +14,7 @@ export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<P
   const alignment = readAlignmentFrame(node)
   const cornerRadius = await readCornerRadius(node)
   const dimensions = await readDimensions(node)
+  const effect = await readEffect(node)
   const fill = await readFill(node)
   const gap = await readGap(node)
   const layout = readLayout(node)
@@ -23,6 +25,7 @@ export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<P
     ...alignment.errors,
     ...cornerRadius.errors,
     ...dimensions.errors,
+    ...effect.errors,
     ...fill.errors,
     ...gap.errors,
     ...layout.errors,
@@ -34,6 +37,7 @@ export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<P
     ...alignment.warnings,
     ...cornerRadius.warnings,
     ...dimensions.warnings,
+    ...effect.warnings,
     ...fill.warnings,
     ...gap.warnings,
     ...layout.warnings,
@@ -47,6 +51,7 @@ export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<P
       ...alignment.properties,
       ...cornerRadius.properties,
       ...dimensions.properties,
+      ...effect.properties,
       ...fill.properties,
       ...gap.properties,
       ...layout.properties,

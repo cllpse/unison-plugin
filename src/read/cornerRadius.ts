@@ -1,5 +1,5 @@
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
-import { resolveBoundUnitClass } from "./unit"
+import { resolveBoundRadiusClass } from "./unit"
 
 type DiscreteCorner = {
   value: number
@@ -34,11 +34,20 @@ const emitCorner = async (
     return
   }
 
-  const className = await resolveBoundUnitClass(prefix, bound, value)
+  const className = await resolveBoundRadiusClass(prefix, bound, value)
 
   if (className) {
     properties[className] = true
+
+    return
   }
+
+  errors.push({
+    nodeId: node.id,
+    message: label
+      ? `Error @ ${node.name} – CORNER RADIUS ${label} value does not match a radius token.`
+      : `Error @ ${node.name} – CORNER RADIUS value does not match a radius token.`,
+  })
 }
 
 const readDiscreteCorners = async (

@@ -1,12 +1,7 @@
 import { COLORS } from "../unison-components/src/constants/colors"
-import { UNITS, UNITS_FIGMA } from "../unison-components/src/constants/units"
+import { RADII, SHADOWS, UNITS, UNITS_FIGMA } from "../unison-components/src/constants/units"
 import type {
   FigmaFill,
-  FigmaFrameCornerRadius,
-  FigmaFrameCornerRadiusBottomLeft,
-  FigmaFrameCornerRadiusBottomRight,
-  FigmaFrameCornerRadiusTopLeft,
-  FigmaFrameCornerRadiusTopRight,
   FigmaFrameGap,
   FigmaFrameHeight,
   FigmaFrameWidth,
@@ -134,8 +129,8 @@ export const mapStrokeColor = buildColorMap<keyof FigmaStroke>("stroke-")
 
 export const mapFillColor = buildColorMap<keyof FigmaFill>("fill-")
 
-/** `05` is a deprecated alias of `0p5` (both 2px). Prefer the new token. */
-const DEPRECATED_UNITS = new Set(["05"])
+/** `05` and `1px` are deprecated aliases of `0p5` (2px) and `px` (1px). Prefer the new tokens. */
+const DEPRECATED_UNITS = new Set(["05", "1px"])
 
 const UNIT_TOKENS = new Set(
   [...Object.keys(UNITS), ...Object.keys(UNITS_FIGMA)].filter((unit) => !DEPRECATED_UNITS.has(unit)),
@@ -161,6 +156,7 @@ const normalizeUnitName = (name: string): string =>
     .replace(/\//g, "-")
     .replace(/^05$/, "0p5")
     .replace(/-05$/, "-0p5")
+    .replace(/(^|-)1px$/, "$1px")
 
 export const resolveUnitToken = (variableName: string | undefined, pixels?: number): string | undefined => {
   if (variableName) {
@@ -222,18 +218,6 @@ const buildSizingMap = <ClassName extends string>(prefix: string): Record<string
   return map
 }
 
-export const mapCornerRadius = buildUnitMap<keyof FigmaFrameCornerRadius>("corner-radius-")
-
-export const mapCornerRadiusTopLeft = buildUnitMap<keyof FigmaFrameCornerRadiusTopLeft>("corner-radius-top-left-")
-
-export const mapCornerRadiusTopRight = buildUnitMap<keyof FigmaFrameCornerRadiusTopRight>("corner-radius-top-right-")
-
-export const mapCornerRadiusBottomLeft =
-  buildUnitMap<keyof FigmaFrameCornerRadiusBottomLeft>("corner-radius-bottom-left-")
-
-export const mapCornerRadiusBottomRight =
-  buildUnitMap<keyof FigmaFrameCornerRadiusBottomRight>("corner-radius-bottom-right-")
-
 export const mapAbsoluteWidth = buildUnitMap<keyof FigmaFrameWidth>("width-")
 
 export const mapAbsoluteHeight = buildUnitMap<keyof FigmaFrameHeight>("height-")
@@ -257,3 +241,59 @@ export const mapPaddingRight = buildUnitMap<keyof FigmaPaddingRight>("padding-ri
 export const mapPaddingTop = buildUnitMap<keyof FigmaPaddingTop>("padding-top-")
 
 export const mapPaddingBottom = buildUnitMap<keyof FigmaPaddingBottom>("padding-bottom-")
+
+const RADIUS_TOKENS = new Set<string>(Object.keys(RADII))
+
+const PIXEL_TO_RADIUS: Record<number, string> = {}
+
+for (const [name, pixels] of Object.entries(RADII)) {
+  PIXEL_TO_RADIUS[pixels] = name
+}
+
+/**
+ * Match the last part of a variable name against a token set, longest first.
+ * @example matchTokenSuffix("radius-2xl", RADIUS_TOKENS) // "2xl"
+ */
+const matchTokenSuffix = (candidate: string, tokens: Set<string>): string | undefined => {
+  if (tokens.has(candidate)) {
+    return candidate
+  }
+
+  const parts = candidate.split("-")
+
+  for (let i = 1; i < parts.length; i++) {
+    const suffix = parts.slice(i).join("-")
+
+    if (tokens.has(suffix)) {
+      return suffix
+    }
+  }
+
+  return undefined
+}
+
+const normalizeStyleName = (name: string): string =>
+  name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/\//g, "-")
+
+/**
+ * Resolve a corner radius to a Tailwind radius name: by the bound variable's name (`radius/lg`), else by its pixel
+ * value, so radii still bound to spacing variables (`spacing/2`, 8px) resolve to `lg`.
+ */
+export const resolveRadiusToken = (variableName: string | undefined, pixels?: number): string | undefined => {
+  const named = variableName ? matchTokenSuffix(normalizeStyleName(variableName), RADIUS_TOKENS) : undefined
+
+  if (named) {
+    return named
+  }
+
+  return pixels !== undefined ? PIXEL_TO_RADIUS[pixels] : undefined
+}
+
+const SHADOW_TOKENS = new Set<string>(["none", "small", "large", ...SHADOWS])
+
+/**
+ * Resolve an effect style name to a shadow token.
+ * @example resolveShadowToken("Shadow/MD") // "md"
+ */
+export const resolveShadowToken = (styleName: string): string | undefined =>
+  matchTokenSuffix(normalizeStyleName(styleName), SHADOW_TOKENS)

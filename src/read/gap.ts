@@ -7,7 +7,7 @@ export const readGap = async (node: SceneNode & AutoLayoutMixin): Promise<Proper
 
   if (node.itemSpacing > 0) {
     if (node.itemSpacing === 1) {
-      properties["gap-1px"] = true
+      properties["gap-px"] = true
     } else if (node.boundVariables?.itemSpacing === undefined && node.itemSpacing !== 1) {
       errors.push({
         nodeId: node.id,
