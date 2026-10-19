@@ -257,7 +257,12 @@
      */
     0: 0,
     /**
+     * px, 1px
+     */
+    px: 1,
+    /**
      * 1px
+     * @deprecated Use `px` instead.
      */
     "1px": 1,
     /**
@@ -270,7 +275,7 @@
      */
     "0p5": 2,
     /**
-     * 0, 0.25rem, 4px
+     * 1, 0.25rem, 4px
      */
     1: 4,
     /**
@@ -278,65 +283,125 @@
      */
     "1p5": 6,
     /**
-     * 0, 0.5rem, 8px
+     * 2, 0.5rem, 8px
      */
     2: 8,
     /**
-     * 0, 0.75rem, 12px
+     * 2p5, 0.625rem, 10px
+     */
+    "2p5": 10,
+    /**
+     * 3, 0.75rem, 12px
      */
     3: 12,
     /**
-     * 0, 1rem, 16px
+     * 3p5, 0.875rem, 14px
+     */
+    "3p5": 14,
+    /**
+     * 4, 1rem, 16px
      */
     4: 16,
     /**
-     * 0, 1.25rem, 20px
+     * 5, 1.25rem, 20px
      */
     5: 20,
     /**
-     * 0, 1.5rem, 24px
+     * 6, 1.5rem, 24px
      */
     6: 24,
     /**
-     * 0, 1.75rem, 28px
+     * 7, 1.75rem, 28px
      */
     7: 28,
     /**
-     * 0, 2rem, 32px
+     * 8, 2rem, 32px
      */
     8: 32,
     /**
-     * 0, 2.5rem, 40px
+     * 9, 2.25rem, 36px
+     */
+    9: 36,
+    /**
+     * 10, 2.5rem, 40px
      */
     10: 40,
     /**
-     * 0, 2.75rem, 44px
+     * 11, 2.75rem, 44px
      */
     11: 44,
     /**
-     * 0, 3rem, 48px
+     * 12, 3rem, 48px
      */
     12: 48,
     /**
-     * 0, 3.5rem, 56px
+     * 14, 3.5rem, 56px
      */
     14: 56,
     /**
-     * 0, 4rem, 64px
+     * 16, 4rem, 64px
      */
     16: 64,
     /**
-     * 0, 5rem, 80px
+     * 20, 5rem, 80px
      */
     20: 80,
     /**
-     * 0, 6rem, 96px
+     * 24, 6rem, 96px
      */
     24: 96,
     /**
-     * 0, 7rem, 112px
+     * 28, 7rem, 112px
      */
     28: 112,
+    /**
+     * 32, 8rem, 128px
+     */
+    32: 128,
+    /**
+     * 36, 9rem, 144px
+     */
+    36: 144,
+    /**
+     * 40, 10rem, 160px
+     */
+    40: 160,
+    /**
+     * 44, 11rem, 176px
+     */
+    44: 176,
+    /**
+     * 48, 12rem, 192px
+     */
+    48: 192,
+    /**
+     * 52, 13rem, 208px
+     */
+    52: 208,
+    /**
+     * 56, 14rem, 224px
+     */
+    56: 224,
+    /**
+     * 60, 15rem, 240px
+     */
+    60: 240,
+    /**
+     * 64, 16rem, 256px
+     */
+    64: 256,
+    /**
+     * 72, 18rem, 288px
+     */
+    72: 288,
+    /**
+     * 80, 20rem, 320px
+     */
+    80: 320,
+    /**
+     * 96, 24rem, 384px
+     */
+    96: 384,
     /**
      * 999px
      */
@@ -352,6 +417,19 @@
      */
     hug: "hug"
   };
+  var RADII = {
+    none: 0,
+    xs: 2,
+    sm: 4,
+    md: 6,
+    lg: 8,
+    xl: 12,
+    "2xl": 16,
+    "3xl": 24,
+    "4xl": 32,
+    full: 999
+  };
+  var SHADOWS = ["2xs", "xs", "sm", "md", "lg", "xl", "2xl"];
 
   // src/utilities.ts
   var _toHex = (n) => {
@@ -525,7 +603,7 @@
   };
   var mapStrokeColor = buildColorMap("stroke-");
   var mapFillColor = buildColorMap("fill-");
-  var DEPRECATED_UNITS = /* @__PURE__ */ new Set(["05"]);
+  var DEPRECATED_UNITS = /* @__PURE__ */ new Set(["05", "1px"]);
   var UNIT_TOKENS = new Set(
     [...Object.keys(UNITS), ...Object.keys(UNITS_FIGMA)].filter((unit) => !DEPRECATED_UNITS.has(unit))
   );
@@ -536,7 +614,7 @@
     }
     PIXEL_TO_TOKEN[pixels] = unit;
   }
-  var normalizeUnitName = (name) => name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/(\d)\.(\d)/g, "$1p$2").replace(/\//g, "-").replace(/^05$/, "0p5").replace(/-05$/, "-0p5");
+  var normalizeUnitName = (name) => name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/(\d)\.(\d)/g, "$1p$2").replace(/\//g, "-").replace(/^05$/, "0p5").replace(/-05$/, "-0p5").replace(/(^|-)1px$/, "$1px");
   var resolveUnitToken = (variableName, pixels) => {
     if (variableName) {
       const candidate = normalizeUnitName(variableName);
@@ -577,11 +655,6 @@
     }
     return map2;
   };
-  var mapCornerRadius = buildUnitMap("corner-radius-");
-  var mapCornerRadiusTopLeft = buildUnitMap("corner-radius-top-left-");
-  var mapCornerRadiusTopRight = buildUnitMap("corner-radius-top-right-");
-  var mapCornerRadiusBottomLeft = buildUnitMap("corner-radius-bottom-left-");
-  var mapCornerRadiusBottomRight = buildUnitMap("corner-radius-bottom-right-");
   var mapAbsoluteWidth = buildUnitMap("width-");
   var mapAbsoluteHeight = buildUnitMap("height-");
   var mapWidth = buildSizingMap("width-");
@@ -594,6 +667,34 @@
   var mapPaddingRight = buildUnitMap("padding-right-");
   var mapPaddingTop = buildUnitMap("padding-top-");
   var mapPaddingBottom = buildUnitMap("padding-bottom-");
+  var RADIUS_TOKENS = new Set(Object.keys(RADII));
+  var PIXEL_TO_RADIUS = {};
+  for (const [name, pixels] of Object.entries(RADII)) {
+    PIXEL_TO_RADIUS[pixels] = name;
+  }
+  var matchTokenSuffix = (candidate, tokens) => {
+    if (tokens.has(candidate)) {
+      return candidate;
+    }
+    const parts = candidate.split("-");
+    for (let i = 1; i < parts.length; i++) {
+      const suffix = parts.slice(i).join("-");
+      if (tokens.has(suffix)) {
+        return suffix;
+      }
+    }
+    return void 0;
+  };
+  var normalizeStyleName = (name) => name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/\//g, "-");
+  var resolveRadiusToken = (variableName, pixels) => {
+    const named = variableName ? matchTokenSuffix(normalizeStyleName(variableName), RADIUS_TOKENS) : void 0;
+    if (named) {
+      return named;
+    }
+    return pixels !== void 0 ? PIXEL_TO_RADIUS[pixels] : void 0;
+  };
+  var SHADOW_TOKENS = /* @__PURE__ */ new Set(["none", "small", "large", ...SHADOWS]);
+  var resolveShadowToken = (styleName) => matchTokenSuffix(normalizeStyleName(styleName), SHADOW_TOKENS);
 
   // src/read/variable.ts
   var variableById = /* @__PURE__ */ new Map();
@@ -611,6 +712,11 @@
   var resolveBoundUnitClass = async (prefix, alias, pixels) => {
     const variable = (alias == null ? void 0 : alias.id) ? await getVariable(alias.id) : null;
     return resolveUnitClass(prefix, variable == null ? void 0 : variable.name, pixels);
+  };
+  var resolveBoundRadiusClass = async (prefix, alias, pixels) => {
+    const variable = (alias == null ? void 0 : alias.id) ? await getVariable(alias.id) : null;
+    const token = resolveRadiusToken(variable == null ? void 0 : variable.name, pixels);
+    return token ? "".concat(prefix).concat(token) : void 0;
   };
 
   // src/read/dimensions.ts
@@ -874,10 +980,15 @@
       });
       return;
     }
-    const className = await resolveBoundUnitClass(prefix, bound, value);
+    const className = await resolveBoundRadiusClass(prefix, bound, value);
     if (className) {
       properties[className] = true;
+      return;
     }
+    errors.push({
+      nodeId: node.id,
+      message: label ? "Error @ ".concat(node.name, " \u2013 CORNER RADIUS ").concat(label, " value does not match a radius token.") : "Error @ ".concat(node.name, " \u2013 CORNER RADIUS value does not match a radius token.")
+    });
   };
   var readDiscreteCorners = async (node) => {
     var _a, _b, _c, _d, _e;
@@ -972,6 +1083,36 @@
     return { properties, errors, warnings: [] };
   };
 
+  // src/read/effect.ts
+  var readEffect = async (node) => {
+    var _a;
+    const properties = {};
+    const errors = [];
+    const warnings = [];
+    const visible = node.effects.filter((effect) => effect.visible);
+    if (visible.length === 0) {
+      return { properties, errors, warnings };
+    }
+    if (node.effectStyleId === "") {
+      warnings.push({
+        nodeId: node.id,
+        message: "Notice @ ".concat(node.name, " \u2013 EFFECT is not bound to an effect style and is skipped.")
+      });
+      return { properties, errors, warnings };
+    }
+    const style = await figma.getStyleByIdAsync(node.effectStyleId);
+    const token = style ? resolveShadowToken(style.name) : void 0;
+    if (token === void 0) {
+      errors.push({
+        nodeId: node.id,
+        message: "Error @ ".concat(node.name, ' \u2013 EFFECT style "').concat((_a = style == null ? void 0 : style.name) != null ? _a : node.effectStyleId, '" does not match a shadow token.')
+      });
+    } else {
+      properties["effect-shadow-".concat(token)] = true;
+    }
+    return { properties, errors, warnings };
+  };
+
   // src/read/gap.ts
   var readGap = async (node) => {
     var _a, _b;
@@ -979,7 +1120,7 @@
     const errors = [];
     if (node.itemSpacing > 0) {
       if (node.itemSpacing === 1) {
-        properties["gap-1px"] = true;
+        properties["gap-px"] = true;
       } else if (((_a = node.boundVariables) == null ? void 0 : _a.itemSpacing) === void 0 && node.itemSpacing !== 1) {
         errors.push({
           nodeId: node.id,
@@ -1146,6 +1287,7 @@
     const alignment = readAlignmentFrame(node);
     const cornerRadius = await readCornerRadius(node);
     const dimensions = await readDimensions(node);
+    const effect = await readEffect(node);
     const fill = await readFill(node);
     const gap = await readGap(node);
     const layout = readLayout(node);
@@ -1155,6 +1297,7 @@
       ...alignment.errors,
       ...cornerRadius.errors,
       ...dimensions.errors,
+      ...effect.errors,
       ...fill.errors,
       ...gap.errors,
       ...layout.errors,
@@ -1165,6 +1308,7 @@
       ...alignment.warnings,
       ...cornerRadius.warnings,
       ...dimensions.warnings,
+      ...effect.warnings,
       ...fill.warnings,
       ...gap.warnings,
       ...layout.warnings,
@@ -1172,7 +1316,7 @@
       ...stroke.warnings
     ];
     return {
-      properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), alignment.properties), cornerRadius.properties), dimensions.properties), fill.properties), gap.properties), layout.properties), padding.properties), stroke.properties), {
+      properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), alignment.properties), cornerRadius.properties), dimensions.properties), effect.properties), fill.properties), gap.properties), layout.properties), padding.properties), stroke.properties), {
         children: node.children
       }),
       errors,
