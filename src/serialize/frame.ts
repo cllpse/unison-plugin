@@ -45,6 +45,7 @@ export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<P
     ...stroke.warnings,
     ...effect.warnings,
   ]
+
   return {
     properties: {
       ...readIdentity(node),

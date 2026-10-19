@@ -1,142 +1,74 @@
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import { truncateName } from "../utilities"
 import { resolveBoundUnitClass } from "./unit"
 
 export const readPadding = async (node: SceneNode & AutoLayoutMixin): Promise<PropertiesErrorOrWarning> => {
   const properties: Properties = {}
   const errors: ErrorOrWarning[] = []
+  const { paddingLeft: left, paddingRight: right, paddingTop: top, paddingBottom: bottom } = node
+  const bound = node.boundVariables
 
-  let paddingVertical = 0
-  let paddingHorizontal = 0
+  // An unbound side already has its error, so only a bound one is resolved.
+  const addClass = async (prefix: string, label: string, alias: VariableAlias | undefined) => {
+    if (alias === undefined) return
 
-  if (node.paddingLeft === node.paddingRight && node.paddingLeft > 0 && node.paddingRight > 0) {
-    if (node.boundVariables?.paddingLeft === undefined || node.boundVariables?.paddingRight === undefined) {
-      errors.push({
-        nodeId: node.id,
-        message: `Error @ ${node.name} – PADDING vertical value not bound to a variable.`,
-      })
-    } else {
-      paddingHorizontal = node.paddingLeft
-    }
-  }
-
-  if (node.paddingTop === node.paddingBottom && node.paddingTop > 0 && node.paddingBottom > 0) {
-    if (node.boundVariables?.paddingTop === undefined || node.boundVariables?.paddingBottom === undefined) {
-      errors.push({
-        nodeId: node.id,
-        message: `Error @ ${node.name} – PADDING horizontal value not bound to a variable.`,
-      })
-    } else {
-      paddingVertical = node.paddingTop
-    }
-  }
-
-  if (paddingHorizontal === 0 && node.paddingLeft > 0 && node.boundVariables?.paddingLeft === undefined) {
-    errors.push({
-      nodeId: node.id,
-      message: `Error @ ${node.name} – PADDING left value is not bound to a variable.`,
-    })
-  }
-
-  if (paddingHorizontal === 0 && node.paddingRight > 0 && node.boundVariables?.paddingRight === undefined) {
-    errors.push({
-      nodeId: node.id,
-      message: `Error @ ${node.name} – PADDING right value is not bound to a variable.`,
-    })
-  }
-
-  if (paddingVertical === 0 && node.paddingTop > 0 && node.boundVariables?.paddingTop === undefined) {
-    errors.push({
-      nodeId: node.id,
-      message: `Error @ ${node.name} – PADDING top value is not bound to a variable.`,
-    })
-  }
-
-  if (paddingVertical === 0 && node.paddingBottom > 0 && node.boundVariables?.paddingBottom === undefined) {
-    errors.push({
-      nodeId: node.id,
-      message: `Error @ ${node.name} – PADDING bottom value is not bound to a variable.`,
-    })
-  }
-
-  if (paddingHorizontal > 0 && paddingVertical > 0 && paddingHorizontal === paddingVertical) {
-    const className = await resolveBoundUnitClass("padding-", node.boundVariables?.paddingLeft, paddingHorizontal)
+    const className = await resolveBoundUnitClass(prefix, alias)
 
     if (className) {
       properties[className] = true
-    }
-  } else {
-    if (paddingHorizontal > 0) {
-      const className = await resolveBoundUnitClass(
-        "padding-horizontal-",
-        node.boundVariables?.paddingLeft,
-        paddingHorizontal,
-      )
 
-      if (className) {
-        properties[className] = true
-      }
-    } else {
-      if (node.paddingLeft > 0) {
-        const className = await resolveBoundUnitClass(
-          "padding-left-",
-          node.boundVariables?.paddingLeft,
-          node.paddingLeft,
-        )
-
-        if (className) {
-          properties[className] = true
-        }
-      }
-
-      if (node.paddingRight > 0) {
-        const className = await resolveBoundUnitClass(
-          "padding-right-",
-          node.boundVariables?.paddingRight,
-          node.paddingRight,
-        )
-
-        if (className) {
-          properties[className] = true
-        }
-      }
+      return
     }
 
-    if (paddingVertical > 0) {
-      const className = await resolveBoundUnitClass(
-        "padding-vertical-",
-        node.boundVariables?.paddingTop,
-        paddingVertical,
-      )
-
-      if (className) {
-        properties[className] = true
-      }
-    } else {
-      if (node.paddingTop > 0) {
-        const className = await resolveBoundUnitClass("padding-top-", node.boundVariables?.paddingTop, node.paddingTop)
-
-        if (className) {
-          properties[className] = true
-        }
-      }
-
-      if (node.paddingBottom > 0) {
-        const className = await resolveBoundUnitClass(
-          "padding-bottom-",
-          node.boundVariables?.paddingBottom,
-          node.paddingBottom,
-        )
-
-        if (className) {
-          properties[className] = true
-        }
-      }
-    }
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not a token` })
   }
 
-  return {
-    properties,
-    errors,
-    warnings: [],
+  const horizontalPair = left === right && left > 0
+  const horizontalBound = bound?.paddingLeft !== undefined && bound?.paddingRight !== undefined
+  const verticalPair = top === bottom && top > 0
+  const verticalBound = bound?.paddingTop !== undefined && bound?.paddingBottom !== undefined
+  const paddingHorizontal = horizontalPair && horizontalBound ? left : 0
+  const paddingVertical = verticalPair && verticalBound ? top : 0
+
+  if (horizontalPair && !horizontalBound) {
+    errors.push({
+      nodeId: node.id,
+      message: `${truncateName(node.name)} – PADDING HORIZONTAL: not bound`,
+    })
   }
+
+  if (verticalPair && !verticalBound) {
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING VERTICAL: not bound` })
+  }
+
+  if (paddingHorizontal === 0 && left > 0 && bound?.paddingLeft === undefined) {
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING LEFT: not bound` })
+  }
+
+  if (paddingHorizontal === 0 && right > 0 && bound?.paddingRight === undefined) {
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING RIGHT: not bound` })
+  }
+
+  if (paddingVertical === 0 && top > 0 && bound?.paddingTop === undefined) {
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING TOP: not bound` })
+  }
+
+  if (paddingVertical === 0 && bottom > 0 && bound?.paddingBottom === undefined) {
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING BOTTOM: not bound` })
+  }
+
+  if (paddingHorizontal > 0 && paddingHorizontal === paddingVertical) {
+    await addClass("padding-", "PADDING", bound?.paddingLeft)
+
+    return { properties, errors, warnings: [] }
+  }
+
+  if (paddingHorizontal > 0) await addClass("padding-horizontal-", "PADDING HORIZONTAL", bound?.paddingLeft)
+  if (paddingHorizontal === 0 && left > 0) await addClass("padding-left-", "PADDING LEFT", bound?.paddingLeft)
+  if (paddingHorizontal === 0 && right > 0) await addClass("padding-right-", "PADDING RIGHT", bound?.paddingRight)
+  if (paddingVertical > 0) await addClass("padding-vertical-", "PADDING VERTICAL", bound?.paddingTop)
+  if (paddingVertical === 0 && top > 0) await addClass("padding-top-", "PADDING TOP", bound?.paddingTop)
+  if (paddingVertical === 0 && bottom > 0) await addClass("padding-bottom-", "PADDING BOTTOM", bound?.paddingBottom)
+
+  return { properties, errors, warnings: [] }
 }

@@ -1,59 +1,68 @@
-import { mapHeight, mapWidth } from "../maps"
+import { HEIGHT_SIZING, WIDTH_SIZING } from "../maps"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import { truncateName } from "../utilities"
 import { resolveBoundUnitClass, resolveBoundWidthClass } from "./unit"
+
+/** One side's flag: a bound unit token when fixed, else its sizing mode, or an error when it is neither. */
+const readSize = async (
+  node: SceneNode,
+  label: "WIDTH" | "HEIGHT",
+  sizing: string,
+  bound: VariableAlias | undefined,
+  resolveFixedClass: (bound: VariableAlias) => Promise<string | undefined>,
+  sizingFlags: Record<string, string>,
+  errors: ErrorOrWarning[],
+): Promise<string | undefined> => {
+  if (sizing === "FIXED" && bound) {
+    const className = await resolveFixedClass(bound)
+
+    if (className === undefined) {
+      errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not a token` })
+    }
+
+    return className
+  }
+
+  if (sizing === "FIXED") {
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not bound` })
+
+    return undefined
+  }
+
+  if (sizing !== "FILL" && sizing !== "HUG") {
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: must be fill or hug` })
+
+    return undefined
+  }
+
+  return sizingFlags[sizing]
+}
 
 export const readDimensions = async (node: SceneNode & LayoutMixin): Promise<PropertiesErrorOrWarning> => {
   const properties: Properties = {}
   const errors: ErrorOrWarning[] = []
 
-  if (node.type !== "VECTOR") {
-    const layoutSizingHorizontal = node.layoutSizingHorizontal
-    const layoutSizingVertical = node.layoutSizingVertical
+  const width = await readSize(
+    node,
+    "WIDTH",
+    node.layoutSizingHorizontal,
+    node.boundVariables?.width,
+    resolveBoundWidthClass,
+    WIDTH_SIZING,
+    errors,
+  )
+  const height = await readSize(
+    node,
+    "HEIGHT",
+    node.layoutSizingVertical,
+    node.boundVariables?.height,
+    (bound) => resolveBoundUnitClass("height-", bound),
+    HEIGHT_SIZING,
+    errors,
+  )
 
-    if (node.layoutSizingHorizontal === "FIXED") {
-      if (node.boundVariables?.width) {
-        const className = await resolveBoundWidthClass(node.boundVariables.width, node.width)
-
-        if (className) {
-          properties[className] = true
-        }
-      } else {
-        errors.push({
-          nodeId: node.id,
-          message: `Error @ ${node.name} – WIDTH value is not bound to a variable.`,
-        })
-      }
-    } else if (layoutSizingHorizontal !== "FILL" && layoutSizingHorizontal !== "HUG") {
-      errors.push({
-        nodeId: node.id,
-        message: `Error @ ${node.name} – WIDTH value must be "fill" or "hug".`,
-      })
-    } else {
-      properties[mapWidth[layoutSizingHorizontal]] = true
-    }
-
-    if (node.layoutSizingVertical === "FIXED") {
-      if (node.boundVariables?.height) {
-        const className = await resolveBoundUnitClass("height-", node.boundVariables.height, node.height)
-
-        if (className) {
-          properties[className] = true
-        }
-      } else {
-        errors.push({
-          nodeId: node.id,
-          message: `Error @ ${node.name} – HEIGHT value is not bound to a variable.`,
-        })
-      }
-    } else if (layoutSizingVertical !== "FILL" && layoutSizingVertical !== "HUG") {
-      errors.push({
-        nodeId: node.id,
-        message: `Error @ ${node.name} – HEIGHT value must be "fill" or "hug".`,
-      })
-    } else {
-      properties[mapHeight[layoutSizingVertical]] = true
-    }
-  }
+  if (width) properties[width] = true
+  if (height) properties[height] = true
 
   return { properties, errors, warnings: [] }
 }

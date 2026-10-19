@@ -20,7 +20,7 @@ export const serializeEllipse = async (node: EllipseNode): Promise<PropertiesErr
       "corner-radius-full": true,
     },
 
-    errors: [],
-    warnings: [],
+    errors: [...dimensions.errors, ...fill.errors, ...stroke.errors],
+    warnings: [...dimensions.warnings, ...fill.warnings, ...stroke.warnings],
   }
 }

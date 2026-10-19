@@ -1,23 +1,27 @@
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import { truncateName } from "../utilities"
 import { resolveBoundUnitClass } from "./unit"
 
-/** A gap's flag suffix (`4`, `px`) from its bound variable, or an error when it isn't bound. */
+/** A gap's flag suffix (`4`, `px`) from its bound variable, or an error when it isn't bound to a unit token. */
 const readSpacing = async (
   node: SceneNode,
   label: string,
-  pixels: number,
   bound: VariableAlias | undefined,
   errors: ErrorOrWarning[],
 ): Promise<string | undefined> => {
-  if (pixels === 1) return "px"
-
   if (bound === undefined) {
-    errors.push({ nodeId: node.id, message: `Error @ ${node.name} – ${label} value is not bound to a variable.` })
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not bound` })
 
     return undefined
   }
 
-  return resolveBoundUnitClass("", bound, pixels)
+  const suffix = await resolveBoundUnitClass("", bound)
+
+  if (suffix === undefined) {
+    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not a token` })
+  }
+
+  return suffix
 }
 
 // Without wrap, Figma has one gap, between items: `gap-`. With wrap on it has two, between items in a row and between
@@ -27,22 +31,19 @@ export const readGap = async (node: SceneNode & AutoLayoutMixin): Promise<Proper
   const errors: ErrorOrWarning[] = []
 
   const items =
-    node.itemSpacing > 0
-      ? await readSpacing(node, "GAP", node.itemSpacing, node.boundVariables?.itemSpacing, errors)
-      : undefined
+    node.itemSpacing > 0 ? await readSpacing(node, "GAP", node.boundVariables?.itemSpacing, errors) : undefined
 
   const rowSpacing = node.layoutWrap === "WRAP" ? node.counterAxisSpacing : null
   const rows =
     rowSpacing !== null && rowSpacing > 0
-      ? await readSpacing(node, "GAP vertical", rowSpacing, node.boundVariables?.counterAxisSpacing, errors)
+      ? await readSpacing(node, "GAP VERTICAL", node.boundVariables?.counterAxisSpacing, errors)
       : undefined
 
-  if (rows === undefined || rows === items) {
-    if (items !== undefined) properties[`gap-${items}`] = true
-  } else {
-    if (items !== undefined) properties[`gap-horizontal-${items}`] = true
-    properties[`gap-vertical-${rows}`] = true
-  }
+  const sameSpacing = rows === undefined || rows === items
+
+  if (sameSpacing && items !== undefined) properties[`gap-${items}`] = true
+  if (!sameSpacing && items !== undefined) properties[`gap-horizontal-${items}`] = true
+  if (!sameSpacing) properties[`gap-vertical-${rows}`] = true
 
   return { properties, errors, warnings: [] }
 }

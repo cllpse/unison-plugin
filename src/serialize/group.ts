@@ -1,5 +1,6 @@
 import { readIdentity } from "../read/identity"
 import type { PropertiesErrorOrWarning } from "../types"
+import { truncateName } from "../utilities"
 
 export const serializeGroup = (node: GroupNode): PropertiesErrorOrWarning => {
   return {
@@ -18,7 +19,7 @@ export const serializeGroup = (node: GroupNode): PropertiesErrorOrWarning => {
     warnings: [
       {
         nodeId: node.id,
-        message: `Notice @ "${node.name}" – GROUP converted to frame.`,
+        message: `${truncateName(node.name)} – GROUP: converted to frame`,
       },
     ],
   }

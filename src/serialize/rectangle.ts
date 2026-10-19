@@ -21,7 +21,8 @@ export const serializeRectangle = async (node: RectangleNode): Promise<Propertie
       ...cornerRadius.properties,
     },
 
-    errors: [],
-    warnings: [],
+    // In the order of Figma's right panel, like the rendered flags.
+    errors: [...dimensions.errors, ...cornerRadius.errors, ...fill.errors, ...stroke.errors],
+    warnings: [...dimensions.warnings, ...cornerRadius.warnings, ...fill.warnings, ...stroke.warnings],
   }
 }

@@ -1,30 +1,26 @@
 import type { FigmaFrameAutolayout } from "../../unison-components/types/figma"
-import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import type { Properties, PropertiesErrorOrWarning } from "../types"
+import { truncateName } from "../utilities"
 
-const map: Record<string, keyof FigmaFrameAutolayout> = {
+const LAYOUT_MODE_FLAGS: Record<string, keyof FigmaFrameAutolayout> = {
   HORIZONTAL: "autolayout-horizontal",
   VERTICAL: "autolayout-vertical",
 }
 
 export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOrWarning => {
-  const properties: Properties = {}
-  const errors: ErrorOrWarning[] = []
-
-  const flag = map[node.layoutMode]
+  const flag = LAYOUT_MODE_FLAGS[node.layoutMode]
 
   if (!flag) {
-    errors.push({
-      nodeId: node.id,
-      message: `Error @ ${node.name} – FRAME has no auto layout.`,
-      always: true,
-    })
-  } else {
-    properties[flag] = true
-
-    if (node.layoutMode === "HORIZONTAL" && node.layoutWrap === "WRAP") {
-      properties.wrap = true
+    return {
+      properties: {},
+      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – AUTO LAYOUT: missing`, always: true }],
+      warnings: [],
     }
   }
 
-  return { properties, errors, warnings: [] }
+  const properties: Properties = { [flag]: true }
+
+  if (node.layoutMode === "HORIZONTAL" && node.layoutWrap === "WRAP") properties.wrap = true
+
+  return { properties, errors: [], warnings: [] }
 }

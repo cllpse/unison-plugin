@@ -1,184 +1,84 @@
-import { COLORS, CONTAINERS, RADIUS, SHADOWS, SPACING } from "../unison-components/dist/design-tokens"
+import { COLORS, CONTAINERS, RADIUS, SHADOWS, SPACING, TEXT_SIZES } from "../unison-components/dist/design-tokens"
 import { SIZE_MODES } from "../unison-components/maps"
-import type {
-  FigmaFill,
-  FigmaFrameGap,
-  FigmaFrameHeight,
-  FigmaFramePadding,
-  FigmaFramePaddingBottom,
-  FigmaFramePaddingHorizontal,
-  FigmaFramePaddingLeft,
-  FigmaFramePaddingRight,
-  FigmaFramePaddingTop,
-  FigmaFramePaddingVertical,
-  FigmaFrameWidth,
-  FigmaStroke,
-} from "../unison-components/types/figma"
-import type { HEX } from "./types"
-import { isHEX } from "./utilities"
+import type { FigmaFrameHeight, FigmaFrameWidth } from "../unison-components/types/figma"
 
-const isRgbHex = (value: string): value is HEX => isHEX(value) && value.length === 7
+/**
+ * The token a variable or style name stands for: the name is the token's prefix plus one of its keys.
+ * @example matchToken("radius-2xl", "radius-", RADIUS_TOKENS) // "2xl"
+ */
+const matchToken = (name: string | undefined, prefix: string, tokens: Set<string>): string | undefined => {
+  if (name === undefined || !name.startsWith(prefix)) return undefined
+
+  const token = name.slice(prefix.length)
+
+  return tokens.has(token) ? token : undefined
+}
 
 const COLOR_TOKENS = new Set<string>()
-const HEX_OWNERS = new Map<string, string[]>()
-
-const addHexOwner = (hex: string, token: string) => {
-  const owners = HEX_OWNERS.get(hex)
-
-  if (owners) {
-    owners.push(token)
-    return
-  }
-
-  HEX_OWNERS.set(hex, [token])
-}
 
 for (const [name, value] of Object.entries(COLORS)) {
   if (typeof value === "string") {
     COLOR_TOKENS.add(name)
 
-    if (isRgbHex(value)) {
-      addHexOwner(value, name)
-    }
-
     continue
   }
 
-  for (const [shade, hex] of Object.entries(value) as [string, string][]) {
+  for (const shade of Object.keys(value)) {
     COLOR_TOKENS.add(`${name}-${shade}`)
-
-    if (isRgbHex(hex)) {
-      addHexOwner(hex, `${name}-${shade}`)
-    }
   }
 }
 
-const UNIQUE_HEX_TO_TOKEN: Record<string, string> = {}
+const SPACING_TOKENS = new Set<string>(Object.keys(SPACING))
 
-for (const [hex, tokens] of HEX_OWNERS) {
-  if (tokens.length === 1) {
-    UNIQUE_HEX_TO_TOKEN[hex] = tokens[0]
-  }
-}
+const RADIUS_TOKENS = new Set<string>(Object.keys(RADIUS))
 
-const normalizeColorName = (name: string): string =>
-  name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/\//g, "-")
+const CONTAINER_TOKENS = new Set<string>(Object.keys(CONTAINERS))
 
-export const resolveColorToken = (variableName: string | undefined, hex?: HEX): string | undefined => {
-  if (variableName) {
-    const candidate = normalizeColorName(variableName)
+const SHADOW_TOKENS = new Set<string>(["none", ...SHADOWS])
 
-    if (COLOR_TOKENS.has(candidate)) {
-      return candidate
-    }
+const TEXT_SIZE_TOKENS = new Set<string>(TEXT_SIZES)
 
-    const parts = candidate.split("-")
+/**
+ * Resolve a color variable to its color token.
+ * @example resolveColorToken("fill-red-500") // "red-500"
+ */
+export const resolveColorToken = (variableName: string | undefined): string | undefined =>
+  matchToken(variableName, "fill-", COLOR_TOKENS)
 
-    for (let i = 1; i < parts.length; i++) {
-      const suffix = parts.slice(i).join("-")
+/**
+ * Resolve a spacing variable to its spacing token.
+ * @example resolveSpacingToken("spacing-0p5") // "0p5"
+ */
+export const resolveSpacingToken = (variableName: string | undefined): string | undefined =>
+  matchToken(variableName, "spacing-", SPACING_TOKENS)
 
-      if (COLOR_TOKENS.has(suffix)) {
-        return suffix
-      }
-    }
-  }
+/**
+ * Resolve a radius variable to its Tailwind radius name.
+ * @example resolveRadiusToken("radius-lg") // "lg"
+ */
+export const resolveRadiusToken = (variableName: string | undefined): string | undefined =>
+  matchToken(variableName, "radius-", RADIUS_TOKENS)
 
-  if (hex && UNIQUE_HEX_TO_TOKEN[hex]) {
-    return UNIQUE_HEX_TO_TOKEN[hex]
-  }
+/**
+ * Resolve a width variable to its name on Tailwind's container scale.
+ * @example resolveContainerToken("container-md") // "md"
+ */
+export const resolveContainerToken = (variableName: string | undefined): string | undefined =>
+  matchToken(variableName, "container-", CONTAINER_TOKENS)
 
-  return undefined
-}
+/**
+ * Resolve an effect style name to a shadow token.
+ * @example resolveShadowToken("shadow-md") // "md"
+ */
+export const resolveShadowToken = (styleName: string): string | undefined =>
+  matchToken(styleName, "shadow-", SHADOW_TOKENS)
 
-const buildColorMap = <ClassName extends string>(prefix: string): Record<HEX, ClassName> => {
-  const map: Record<string, ClassName> = {}
-
-  for (const [hex, token] of Object.entries(UNIQUE_HEX_TO_TOKEN)) {
-    map[hex] = `${prefix}${token}` as ClassName
-  }
-
-  return map as Record<HEX, ClassName>
-}
-
-export const resolveColorClass = <ClassName extends string>(
-  prefix: string,
-  variableName: string | undefined,
-  hex: HEX,
-): ClassName | undefined => {
-  const token = resolveColorToken(variableName, hex)
-
-  return token ? (`${prefix}${token}` as ClassName) : undefined
-}
-
-export const mapStrokeColor = buildColorMap<keyof FigmaStroke>("stroke-")
-
-export const mapFillColor = buildColorMap<keyof FigmaFill>("fill-")
-
-const UNIT_TOKENS = new Set<string>([...Object.keys(SPACING), ...SIZE_MODES])
-
-const PIXEL_TO_TOKEN: Record<number, string> = {}
-
-for (const [unit, pixels] of Object.entries(SPACING)) {
-  PIXEL_TO_TOKEN[pixels] = unit
-}
-
-const normalizeUnitName = (name: string): string =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/_/g, "-")
-    .replace(/(\d)\.(\d)/g, "$1p$2")
-    .replace(/\//g, "-")
-    .replace(/^05$/, "0p5")
-    .replace(/-05$/, "-0p5")
-    .replace(/(^|-)1px$/, "$1px")
-
-export const resolveUnitToken = (variableName: string | undefined, pixels?: number): string | undefined => {
-  if (variableName) {
-    const candidate = normalizeUnitName(variableName)
-
-    if (UNIT_TOKENS.has(candidate)) {
-      return candidate
-    }
-
-    const parts = candidate.split("-")
-
-    for (let i = 1; i < parts.length; i++) {
-      const suffix = parts.slice(i).join("-")
-
-      if (UNIT_TOKENS.has(suffix)) {
-        return suffix
-      }
-    }
-  }
-
-  if (pixels !== undefined && PIXEL_TO_TOKEN[pixels]) {
-    return PIXEL_TO_TOKEN[pixels]
-  }
-
-  return undefined
-}
-
-export const resolveUnitClass = (
-  prefix: string,
-  variableName: string | undefined,
-  pixels: number,
-): string | undefined => {
-  const token = resolveUnitToken(variableName, pixels)
-
-  return token ? `${prefix}${token}` : undefined
-}
-
-const buildUnitMap = <ClassName extends string>(prefix: string): Record<number, ClassName> => {
-  const map: Record<number, ClassName> = {}
-
-  for (const [pixels, token] of Object.entries(PIXEL_TO_TOKEN)) {
-    map[Number(pixels)] = `${prefix}${token}` as ClassName
-  }
-
-  return map
-}
+/**
+ * Resolve a text style name to a text size.
+ * @example resolveTextSizeToken("text-sm") // "sm"
+ */
+export const resolveTextSizeToken = (styleName: string): string | undefined =>
+  matchToken(styleName, "text-", TEXT_SIZE_TOKENS)
 
 const buildSizingMap = <ClassName extends string>(prefix: string): Record<string, ClassName> => {
   const map: Record<string, ClassName> = {}
@@ -190,92 +90,6 @@ const buildSizingMap = <ClassName extends string>(prefix: string): Record<string
   return map
 }
 
-export const mapAbsoluteWidth = buildUnitMap<keyof FigmaFrameWidth>("width-")
+export const WIDTH_SIZING = buildSizingMap<keyof FigmaFrameWidth>("width-")
 
-export const mapAbsoluteHeight = buildUnitMap<keyof FigmaFrameHeight>("height-")
-
-export const mapWidth = buildSizingMap<keyof FigmaFrameWidth>("width-")
-
-export const mapHeight = buildSizingMap<keyof FigmaFrameHeight>("height-")
-
-export const mapGap = buildUnitMap<keyof FigmaFrameGap>("gap-")
-
-export const mapPadding = buildUnitMap<keyof FigmaFramePadding>("padding-")
-
-export const mapPaddingVertical = buildUnitMap<keyof FigmaFramePaddingVertical>("padding-vertical-")
-
-export const mapPaddingHorizontal = buildUnitMap<keyof FigmaFramePaddingHorizontal>("padding-horizontal-")
-
-export const mapPaddingLeft = buildUnitMap<keyof FigmaFramePaddingLeft>("padding-left-")
-
-export const mapPaddingRight = buildUnitMap<keyof FigmaFramePaddingRight>("padding-right-")
-
-export const mapPaddingTop = buildUnitMap<keyof FigmaFramePaddingTop>("padding-top-")
-
-export const mapPaddingBottom = buildUnitMap<keyof FigmaFramePaddingBottom>("padding-bottom-")
-
-const RADIUS_TOKENS = new Set<string>(Object.keys(RADIUS))
-
-const PIXEL_TO_RADIUS: Record<number, string> = {}
-
-for (const [name, pixels] of Object.entries(RADIUS)) {
-  PIXEL_TO_RADIUS[pixels] = name
-}
-
-/**
- * Match the last part of a variable name against a token set, longest first.
- * @example matchTokenSuffix("radius-2xl", RADIUS_TOKENS) // "2xl"
- */
-const matchTokenSuffix = (candidate: string, tokens: Set<string>): string | undefined => {
-  if (tokens.has(candidate)) {
-    return candidate
-  }
-
-  const parts = candidate.split("-")
-
-  for (let i = 1; i < parts.length; i++) {
-    const suffix = parts.slice(i).join("-")
-
-    if (tokens.has(suffix)) {
-      return suffix
-    }
-  }
-
-  return undefined
-}
-
-const normalizeStyleName = (name: string): string =>
-  name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/\//g, "-")
-
-/**
- * Resolve a corner radius to a Tailwind radius name: by the bound variable's name (`radius/lg`), else by its pixel
- * value, so radii still bound to spacing variables (`spacing/2`, 8px) resolve to `lg`.
- */
-export const resolveRadiusToken = (variableName: string | undefined, pixels?: number): string | undefined => {
-  const named = variableName ? matchTokenSuffix(normalizeStyleName(variableName), RADIUS_TOKENS) : undefined
-
-  if (named) {
-    return named
-  }
-
-  return pixels !== undefined ? PIXEL_TO_RADIUS[pixels] : undefined
-}
-
-/**
- * Resolve a width variable named for Tailwind's container scale (`container-md`, `unison-container/md`) to its name.
- * Only the name counts: container pixel values overlap the spacing scale (256px is also `64`).
- */
-export const resolveContainerToken = (variableName: string | undefined): string | undefined => {
-  const [, key] = normalizeStyleName(variableName ?? "").match(/(?:^|-)container-(.+)$/) ?? []
-
-  return key !== undefined && key in CONTAINERS ? key : undefined
-}
-
-const SHADOW_TOKENS = new Set<string>(["none", "small", "large", ...SHADOWS])
-
-/**
- * Resolve an effect style name to a shadow token.
- * @example resolveShadowToken("Shadow/MD") // "md"
- */
-export const resolveShadowToken = (styleName: string): string | undefined =>
-  matchTokenSuffix(normalizeStyleName(styleName), SHADOW_TOKENS)
+export const HEIGHT_SIZING = buildSizingMap<keyof FigmaFrameHeight>("height-")

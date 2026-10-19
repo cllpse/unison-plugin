@@ -1,5 +1,3 @@
-import { adoptStyle } from "./legacyNames"
-
 // Figma's variable import can't create styles, so this creates a text style per Tailwind text size from the imported
 // `font-size-<name>` and `line-height-<name>` variables (unison-components/dist/design-tokens.json),
 // with both bound. New styles use Inter Regular; running it again updates the styles in place and keeps their font.
@@ -44,18 +42,14 @@ export const createTextStyles = async (): Promise<string> => {
 
     if (!fontSize) continue
 
-    const { style, existed } = await adoptStyle(
-      styles,
-      `text-${name}`,
-      () => figma.createTextStyle(),
-      async (node, adopted) => {
-        if (node.type === "TEXT") await node.setTextStyleIdAsync(adopted.id)
-      },
-    )
+    const existing = styles.find((style) => style.name === `text-${name}`)
+    const style = existing ?? figma.createTextStyle()
 
-    await figma.loadFontAsync(existed ? style.fontName : DEFAULT_FONT)
+    style.name = `text-${name}`
 
-    if (!existed) {
+    await figma.loadFontAsync(existing ? style.fontName : DEFAULT_FONT)
+
+    if (!existing) {
       style.fontName = DEFAULT_FONT
     }
 
@@ -66,7 +60,7 @@ export const createTextStyles = async (): Promise<string> => {
 
     previous = style
 
-    if (existed) {
+    if (existing) {
       updated++
     } else {
       created++

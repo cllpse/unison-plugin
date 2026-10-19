@@ -1,34 +1,37 @@
-import { resolveContainerToken, resolveRadiusToken, resolveUnitClass } from "../maps"
+import { resolveContainerToken, resolveRadiusToken, resolveSpacingToken } from "../maps"
 import { getVariable } from "./variable"
+
+const getVariableName = async (alias: VariableAlias | undefined): Promise<string | undefined> => {
+  const variable = alias?.id ? await getVariable(alias.id) : null
+
+  return variable?.name
+}
 
 export const resolveBoundUnitClass = async (
   prefix: string,
   alias: VariableAlias | undefined,
-  pixels: number,
 ): Promise<string | undefined> => {
-  const variable = alias?.id ? await getVariable(alias.id) : null
+  const token = resolveSpacingToken(await getVariableName(alias))
 
-  return resolveUnitClass(prefix, variable?.name, pixels)
+  return token === undefined ? undefined : `${prefix}${token}`
 }
 
 export const resolveBoundRadiusClass = async (
   prefix: string,
   alias: VariableAlias | undefined,
-  pixels: number,
 ): Promise<string | undefined> => {
-  const variable = alias?.id ? await getVariable(alias.id) : null
-  const token = resolveRadiusToken(variable?.name, pixels)
+  const token = resolveRadiusToken(await getVariableName(alias))
 
-  return token ? `${prefix}${token}` : undefined
+  return token === undefined ? undefined : `${prefix}${token}`
 }
 
 /** A fixed width: a container width (`width-md`) by its variable's name, else a spacing unit. */
-export const resolveBoundWidthClass = async (
-  alias: VariableAlias | undefined,
-  pixels: number,
-): Promise<string | undefined> => {
-  const variable = alias?.id ? await getVariable(alias.id) : null
-  const container = resolveContainerToken(variable?.name)
+export const resolveBoundWidthClass = async (alias: VariableAlias | undefined): Promise<string | undefined> => {
+  const name = await getVariableName(alias)
+  const container = resolveContainerToken(name)
+  const spacing = resolveSpacingToken(name)
 
-  return container ? `width-${container}` : resolveUnitClass("width-", variable?.name, pixels)
+  if (container !== undefined) return `width-${container}`
+
+  return spacing === undefined ? undefined : `width-${spacing}`
 }

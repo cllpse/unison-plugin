@@ -8,6 +8,7 @@ import { readLayout } from "../read/layout"
 import { readPadding } from "../read/padding"
 import { readStroke } from "../read/stroke"
 import type { PropertiesErrorOrWarning } from "../types"
+import { truncateName } from "../utilities"
 
 export const serializeUnknown = async (
   node: SceneNode & AutoLayoutMixin & CornerMixin & LayoutMixin & MinimalFillsMixin & MinimalStrokesMixin,
@@ -37,13 +38,31 @@ export const serializeUnknown = async (
       children: "children" in node ? node.children : [],
     },
 
-    // Components, instances and other frame-like layers need auto layout too (reported by readLayout).
-    errors: "layoutMode" in node ? layout.errors : [],
+    // Components, instances and other frame-like layers need auto layout too (reported by readLayout); other layers
+    // have none to report. The rest is in the order of Figma's right panel, like the rendered flags.
+    errors: [
+      ...("layoutMode" in node ? layout.errors : []),
+      ...dimensions.errors,
+      ...alignment.errors,
+      ...gap.errors,
+      ...padding.errors,
+      ...cornerRadius.errors,
+      ...fill.errors,
+      ...stroke.errors,
+    ],
     warnings: [
       {
         nodeId: node.id,
-        message: `Notice @ "${node.name}" – unknown layer type.`,
+        message: `${truncateName(node.name)} – LAYER: unsupported (${node.type})`,
       },
+      ...layout.warnings,
+      ...dimensions.warnings,
+      ...alignment.warnings,
+      ...gap.warnings,
+      ...padding.warnings,
+      ...cornerRadius.warnings,
+      ...fill.warnings,
+      ...stroke.warnings,
     ],
   }
 }

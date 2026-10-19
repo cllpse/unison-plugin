@@ -1,4 +1,4 @@
-import type { ErrorOrWarning, PropertiesErrorOrWarning } from "../types"
+import type { PropertiesErrorOrWarning } from "../types"
 import { getMainDefinitionLayerForNode, hasExcludeFromOutputAnnotation } from "./annotationExclude"
 import { serializeEllipse } from "./ellipse"
 import { serializeFrame } from "./frame"
@@ -13,49 +13,17 @@ const shouldExcludeFromOutput = async (
   annotationCategories: Awaited<ReturnType<typeof figma.annotations.getAnnotationCategoriesAsync>>,
   getMainComponentCached: (instance: InstanceNode) => Promise<ComponentNode | null>,
 ): Promise<boolean> => {
-  if (!node.visible) {
-    return true
-  }
+  if (!node.visible) return true
+  if (hasExcludeFromOutputAnnotation(node.annotations, annotationCategories)) return true
 
-  if (hasExcludeFromOutputAnnotation(node.annotations, annotationCategories)) {
-    return true
-  }
-
-  if (node.type === "INSTANCE") {
-    const main = await getMainComponentCached(node)
-    if (main !== null && hasExcludeFromOutputAnnotation(main.annotations, annotationCategories)) {
-      return true
-    }
-  }
-
+  // For an instance this is its main component, so its own annotations are checked here too.
   const definitionLayer = await getMainDefinitionLayerForNode(node, getMainComponentCached)
-  if (
+
+  return (
     definitionLayer !== null &&
     "annotations" in definitionLayer &&
     hasExcludeFromOutputAnnotation(definitionLayer.annotations, annotationCategories)
-  ) {
-    return true
-  }
-
-  return false
-}
-
-const collectNodesById = (root: SceneNode): Map<string, SceneNode> => {
-  const map = new Map<string, SceneNode>()
-
-  const visit = (n: SceneNode) => {
-    map.set(n.id, n)
-
-    if ("children" in n) {
-      for (const c of n.children) {
-        visit(c)
-      }
-    }
-  }
-
-  visit(root)
-
-  return map
+  )
 }
 
 const isInFrame = (node: SceneNode): boolean =>
@@ -64,12 +32,7 @@ const isInFrame = (node: SceneNode): boolean =>
   node.parent.type !== "SECTION" &&
   node.parent.type !== "DOCUMENT"
 
-const asNotice = (error: ErrorOrWarning): ErrorOrWarning => ({
-  ...error,
-  message: error.message.replace(/^Error @/, "Notice @"),
-})
-
-const _node = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
+const serializeLayer = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
   switch (node.type) {
     case "FRAME":
       return serializeFrame(node)
@@ -78,10 +41,12 @@ const _node = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
       if (node.children[0]?.name === "Bounding box" && node.children[1]?.type === "VECTOR") {
         return serializeVector(node.children[1], node)
       }
+
       // matches Google Material Design icons: a group of [Vector path, Rectangle]
       if (node.children.length === 2 && node.children[0]?.type === "VECTOR" && node.children[1]?.type === "RECTANGLE") {
         return serializeVector(node.children[0], node)
       }
+
       return serializeGroup(node)
     }
     case "VECTOR":
@@ -91,7 +56,7 @@ const _node = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
     case "ELLIPSE":
       return serializeEllipse(node)
     case "TEXT":
-      return await serializeText(node)
+      return serializeText(node)
     default:
       return serializeUnknown(
         node as SceneNode & AutoLayoutMixin & CornerMixin & LayoutMixin & MinimalFillsMixin & MinimalStrokesMixin,
@@ -100,21 +65,22 @@ const _node = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
 }
 
 export const serializeNode = async (root: SceneNode): Promise<PropertiesErrorOrWarning> => {
-  const nodesById = collectNodesById(root)
   const annotationCategories = await figma.annotations.getAnnotationCategoriesAsync()
   const mainComponentByInstanceId = new Map<string, Promise<ComponentNode | null>>()
 
   const getMainComponentCached = (instance: InstanceNode): Promise<ComponentNode | null> => {
     const existing = mainComponentByInstanceId.get(instance.id)
-    if (existing) {
-      return existing
-    }
-    const p = instance.getMainComponentAsync()
-    mainComponentByInstanceId.set(instance.id, p)
-    return p
+
+    if (existing) return existing
+
+    const main = instance.getMainComponentAsync()
+
+    mainComponentByInstanceId.set(instance.id, main)
+
+    return main
   }
 
-  const serializeWithMap = async (node: SceneNode & AnnotationsMixin): Promise<PropertiesErrorOrWarning> => {
+  const serializeTree = async (node: SceneNode & AnnotationsMixin): Promise<PropertiesErrorOrWarning> => {
     if (await shouldExcludeFromOutput(node, annotationCategories, getMainComponentCached)) {
       return {
         properties: {
@@ -125,38 +91,26 @@ export const serializeNode = async (root: SceneNode): Promise<PropertiesErrorOrW
       }
     }
 
-    const r = await _node(node)
+    const r = await serializeLayer(node)
 
     // A top-level layer (its parent is the page or a section, not a frame) reports its own errors as notices, except
     // the ones that always stay errors (missing auto layout).
     if (!isInFrame(node) && r.errors.length > 0) {
-      r.warnings = [...r.errors.filter((error) => !error.always).map(asNotice), ...r.warnings]
+      r.warnings = [...r.errors.filter((error) => !error.always), ...r.warnings]
       r.errors = r.errors.filter((error) => error.always)
     }
 
     const children = "children" in node ? node.children : []
 
     // A vector is a leaf: an icon group serialized as a vector already holds its glyph, so its layers are not children.
-    if (r.properties.type !== "VECTOR" && children.length > 0 && !("OVERRIDE_TEXT_CONTENT" in r.properties)) {
+    if (r.properties.type !== "VECTOR" && children.length > 0) {
       r.properties.children = await Promise.all(
-        children.map((child) => {
-          const id = child.id
-          const fullNode = id !== null ? nodesById.get(id) : null
-          const target = fullNode ?? child
-
-          return serializeWithMap(target as SceneNode & AnnotationsMixin)
-        }),
+        children.map((child) => serializeTree(child as SceneNode & AnnotationsMixin)),
       )
     }
 
-    return {
-      properties: r.properties,
-      errors: r.errors,
-      warnings: r.warnings,
-    }
+    return r
   }
 
-  const r = await serializeWithMap(root as SceneNode & AnnotationsMixin)
-
-  return r
+  return serializeTree(root as SceneNode & AnnotationsMixin)
 }

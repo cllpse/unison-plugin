@@ -3,28 +3,17 @@ const EXCLUDE_MARK = "EXCLUDE_FROM_OUTPUT"
 
 const normalizeExcludeToken = (s: string | undefined): string => (s ?? "").trim().toUpperCase()
 
-export const annotationMatchesExcludeFromOutput = (
+const annotationMatchesExcludeFromOutput = (
   a: Annotation,
   annotationCategories: Awaited<ReturnType<typeof figma.annotations.getAnnotationCategoriesAsync>> | undefined,
 ): boolean => {
-  if (normalizeExcludeToken(a.label) === EXCLUDE_MARK) {
-    return true
-  }
+  if (normalizeExcludeToken(a.label) === EXCLUDE_MARK) return true
+  if (a.labelMarkdown && normalizeExcludeToken(a.labelMarkdown.replace(/<[^>]+>/g, " ")) === EXCLUDE_MARK) return true
+  if (a.categoryId === undefined) return false
 
-  if (a.labelMarkdown && normalizeExcludeToken(a.labelMarkdown.replace(/<[^>]+>/g, " ")) === EXCLUDE_MARK) {
-    return true
-  }
-
-  const cats = annotationCategories ?? []
-  if (a.categoryId !== undefined) {
-    for (const c of cats) {
-      if (c.id === a.categoryId && normalizeExcludeToken(c.label) === EXCLUDE_MARK) {
-        return true
-      }
-    }
-  }
-
-  return false
+  return (annotationCategories ?? []).some(
+    (c) => c.id === a.categoryId && normalizeExcludeToken(c.label) === EXCLUDE_MARK,
+  )
 }
 
 export const hasExcludeFromOutputAnnotation = (
@@ -34,12 +23,13 @@ export const hasExcludeFromOutputAnnotation = (
 
 const findNearestInstanceAncestor = (node: SceneNode): InstanceNode | null => {
   let walk: BaseNode | null = node
+
   while (walk) {
-    if (walk.type === "INSTANCE") {
-      return walk
-    }
+    if (walk.type === "INSTANCE") return walk
+
     walk = walk.parent
   }
+
   return null
 }
 
@@ -52,55 +42,46 @@ export const getMainDefinitionLayerForNode = async (
   getMainComponent: (instance: InstanceNode) => Promise<ComponentNode | null>,
 ): Promise<SceneNode | null> => {
   const instance = findNearestInstanceAncestor(node)
-  if (instance === null) {
-    return null
-  }
 
-  if (node === instance) {
-    return await getMainComponent(instance)
-  }
+  if (instance === null) return null
+  if (node === instance) return getMainComponent(instance)
 
   const path: number[] = []
-  let current: BaseNode | null = node
-  while (current !== null) {
+  let current: BaseNode = node
+
+  while (true) {
     const parent: BaseNode | null = current.parent
-    if (parent === null) {
-      return null
-    }
-    if (!("children" in parent)) {
-      return null
-    }
+
+    if (parent === null) return null
+    if (!("children" in parent)) return null
+
     const siblings: ReadonlyArray<SceneNode> = (parent as ChildrenMixin).children
-    const idx = siblings.indexOf(current as SceneNode)
-    if (idx < 0) {
-      return null
-    }
-    path.unshift(idx)
-    if (parent === instance) {
-      break
-    }
+    const index = siblings.indexOf(current as SceneNode)
+
+    if (index < 0) return null
+
+    path.unshift(index)
+
+    if (parent === instance) break
+
     current = parent
   }
 
-  if (current === null || current.parent !== instance) {
-    return null
-  }
-
   const main = await getMainComponent(instance)
-  if (main === null) {
-    return null
+
+  if (main === null) return null
+
+  let definition: SceneNode = main
+
+  for (const i of path) {
+    if (!("children" in definition)) return null
+
+    const nextChildren: ReadonlyArray<SceneNode> = definition.children
+
+    if (i >= nextChildren.length) return null
+
+    definition = nextChildren[i] as SceneNode
   }
 
-  let def: SceneNode = main
-  for (const i of path) {
-    if (!("children" in def)) {
-      return null
-    }
-    const nextChildren: ReadonlyArray<SceneNode> = def.children
-    if (i >= nextChildren.length) {
-      return null
-    }
-    def = nextChildren[i] as SceneNode
-  }
-  return def
+  return definition
 }

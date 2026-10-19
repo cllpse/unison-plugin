@@ -20,23 +20,6 @@
   };
   var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
 
-  // src/legacyNames.ts
-  var canonicalName = (name) => name.split("/").map((part) => part.replace(/^unison-/, "")).join("-").replace(/^fill-/, "");
-  var adoptStyle = async (styles, name, create, apply) => {
-    const exact = styles.find((style2) => style2.name === name);
-    const older = styles.filter((style2) => style2 !== exact && canonicalName(style2.name) === canonicalName(name));
-    const found = exact != null ? exact : older.shift();
-    const style = found != null ? found : create();
-    style.name = name;
-    for (const copy of older) {
-      for (const { node } of await copy.getStyleConsumersAsync()) {
-        await apply(node, style);
-      }
-      copy.remove();
-    }
-    return { style, existed: found !== void 0 };
-  };
-
   // src/createShadowStyles.ts
   var SHADOW_VARIABLE = /^shadow-([^-]+)-(\d+)-(offset-x|offset-y|blur|spread|color)$/;
   var FIELDS = {
@@ -99,18 +82,13 @@
     let updated = 0;
     let previous = null;
     for (const [name, layers] of shadows) {
-      const { style, existed } = await adoptStyle(
-        styles,
-        "shadow-".concat(name),
-        () => figma.createEffectStyle(),
-        async (node, adopted) => {
-          if ("setEffectStyleIdAsync" in node) await node.setEffectStyleIdAsync(adopted.id);
-        }
-      );
+      const existing = styles.find((style2) => style2.name === "shadow-".concat(name));
+      const style = existing != null ? existing : figma.createEffectStyle();
+      style.name = "shadow-".concat(name);
       style.effects = [...layers.entries()].sort(([a], [b]) => a - b).map(([, layer]) => buildEffect(layer));
       if (previous) figma.moveLocalEffectStyleAfter(style, previous);
       previous = style;
-      if (existed) {
+      if (existing) {
         updated++;
       } else {
         created++;
@@ -146,23 +124,18 @@
     for (const [name, size] of sizes) {
       const fontSize = size["font-size"];
       if (!fontSize) continue;
-      const { style, existed } = await adoptStyle(
-        styles,
-        "text-".concat(name),
-        () => figma.createTextStyle(),
-        async (node, adopted) => {
-          if (node.type === "TEXT") await node.setTextStyleIdAsync(adopted.id);
-        }
-      );
-      await figma.loadFontAsync(existed ? style.fontName : DEFAULT_FONT);
-      if (!existed) {
+      const existing = styles.find((style2) => style2.name === "text-".concat(name));
+      const style = existing != null ? existing : figma.createTextStyle();
+      style.name = "text-".concat(name);
+      await figma.loadFontAsync(existing ? style.fontName : DEFAULT_FONT);
+      if (!existing) {
         style.fontName = DEFAULT_FONT;
       }
       style.setBoundVariable("fontSize", fontSize);
       style.setBoundVariable("lineHeight", (_b = size["line-height"]) != null ? _b : null);
       if (previous) figma.moveLocalTextStyleAfter(style, previous);
       previous = style;
-      if (existed) {
+      if (existing) {
         updated++;
       } else {
         created++;
@@ -226,7 +199,7 @@
     return typeof name === "string" ? name : "Default";
   };
   var importVariables = async (text) => {
-    var _a3, _b, _c, _d, _e, _f;
+    var _a3, _b, _c, _d;
     if (figma.editorType !== "figma") {
       return "Variables need the Figma editor.";
     }
@@ -237,22 +210,21 @@
       file = void 0;
     }
     if (!(file instanceof Map)) {
-      throw new Error("not a tokens file.");
+      throw new Error("not a design tokens file.");
     }
     const collectionsInFile = [...file].map(([name, modes]) => ({
       name,
       modes: modes instanceof Map ? [...modes.values()].filter((mode) => mode instanceof Map) : []
     }));
     if (collectionsInFile.length === 0 || collectionsInFile.some(({ modes }) => modes.length === 0)) {
-      throw new Error("not a tokens file.");
+      throw new Error("not a design tokens file.");
     }
     const collections = await figma.variables.getLocalVariableCollectionsAsync();
     const variables = await figma.variables.getLocalVariablesAsync();
     let created = 0;
     let updated = 0;
     for (const { name, modes } of collectionsInFile) {
-      const collection = (_b = (_a3 = collections.find((existing) => existing.name === name)) != null ? _a3 : collections.find((existing) => canonicalName(existing.name) === canonicalName(name))) != null ? _b : figma.variables.createVariableCollection(name);
-      collection.name = name;
+      const collection = (_a3 = collections.find((existing) => existing.name === name)) != null ? _a3 : figma.variables.createVariableCollection(name);
       const modeIds = modes.map((mode, i) => {
         const existing = collection.modes.find((m) => m.name === modeName(mode));
         if (existing) return existing.modeId;
@@ -268,114 +240,73 @@
       for (const [variableName, token] of tokensByMode[0]) {
         const type = TYPES[token.$type];
         if (!type) continue;
-        let variable = (_c = byName.get(variableName)) != null ? _c : inCollection.find(
-          (existing) => !tokensByMode[0].has(existing.name) && canonicalName(existing.name) === canonicalName(variableName)
-        );
+        let variable = byName.get(variableName);
         if (variable && variable.resolvedType !== type) {
           variable.remove();
           variable = void 0;
         }
         if (variable) {
-          variable.name = variableName;
           updated++;
         } else {
           variable = figma.variables.createVariable(variableName, collection, type);
           created++;
         }
-        variable.scopes = (_e = (_d = token.$extensions) == null ? void 0 : _d["com.figma.scopes"]) != null ? _e : ["ALL_SCOPES"];
+        variable.scopes = (_c = (_b = token.$extensions) == null ? void 0 : _b["com.figma.scopes"]) != null ? _c : ["ALL_SCOPES"];
         for (const [i, tokens] of tokensByMode.entries()) {
-          variable.setValueForMode(modeIds[i], valueOfToken((_f = tokens.get(variableName)) != null ? _f : token));
+          variable.setValueForMode(modeIds[i], valueOfToken((_d = tokens.get(variableName)) != null ? _d : token));
         }
       }
     }
     return "Variables: ".concat(created, " created, ").concat(updated, " updated.");
   };
 
-  // src/placeholder.js
-  var placeholder = "\n\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800Frame Plugin\n\u2800\u2800\u2800\u2800\u2800\u2800\u2800Figma Generator\n\n\u2800\u2800\u2800Select a frame to generate\n\u2800\u2800\u2800\u2800\u2800React component code\u2026\n";
-  if (typeof window !== "undefined") {
-    window.placeholder = placeholder;
-  }
-
   // src/serialize/annotationExclude.ts
   var EXCLUDE_MARK = "EXCLUDE_FROM_OUTPUT";
   var normalizeExcludeToken = (s) => (s != null ? s : "").trim().toUpperCase();
   var annotationMatchesExcludeFromOutput = (a, annotationCategories) => {
-    if (normalizeExcludeToken(a.label) === EXCLUDE_MARK) {
-      return true;
-    }
-    if (a.labelMarkdown && normalizeExcludeToken(a.labelMarkdown.replace(/<[^>]+>/g, " ")) === EXCLUDE_MARK) {
-      return true;
-    }
-    const cats = annotationCategories != null ? annotationCategories : [];
-    if (a.categoryId !== void 0) {
-      for (const c of cats) {
-        if (c.id === a.categoryId && normalizeExcludeToken(c.label) === EXCLUDE_MARK) {
-          return true;
-        }
-      }
-    }
-    return false;
+    if (normalizeExcludeToken(a.label) === EXCLUDE_MARK) return true;
+    if (a.labelMarkdown && normalizeExcludeToken(a.labelMarkdown.replace(/<[^>]+>/g, " ")) === EXCLUDE_MARK) return true;
+    if (a.categoryId === void 0) return false;
+    return (annotationCategories != null ? annotationCategories : []).some(
+      (c) => c.id === a.categoryId && normalizeExcludeToken(c.label) === EXCLUDE_MARK
+    );
   };
   var hasExcludeFromOutputAnnotation = (annotations, annotationCategories) => (annotations != null ? annotations : []).some((a) => annotationMatchesExcludeFromOutput(a, annotationCategories));
   var findNearestInstanceAncestor = (node) => {
     let walk = node;
     while (walk) {
-      if (walk.type === "INSTANCE") {
-        return walk;
-      }
+      if (walk.type === "INSTANCE") return walk;
       walk = walk.parent;
     }
     return null;
   };
   var getMainDefinitionLayerForNode = async (node, getMainComponent) => {
     const instance = findNearestInstanceAncestor(node);
-    if (instance === null) {
-      return null;
-    }
-    if (node === instance) {
-      return await getMainComponent(instance);
-    }
+    if (instance === null) return null;
+    if (node === instance) return getMainComponent(instance);
     const path = [];
     let current = node;
-    while (current !== null) {
+    while (true) {
       const parent = current.parent;
-      if (parent === null) {
-        return null;
-      }
-      if (!("children" in parent)) {
-        return null;
-      }
+      if (parent === null) return null;
+      if (!("children" in parent)) return null;
       const siblings = parent.children;
-      const idx = siblings.indexOf(current);
-      if (idx < 0) {
-        return null;
-      }
-      path.unshift(idx);
-      if (parent === instance) {
-        break;
-      }
+      const index = siblings.indexOf(current);
+      if (index < 0) return null;
+      path.unshift(index);
+      if (parent === instance) break;
       current = parent;
     }
-    if (current === null || current.parent !== instance) {
-      return null;
-    }
     const main = await getMainComponent(instance);
-    if (main === null) {
-      return null;
-    }
-    let def = main;
+    if (main === null) return null;
+    let definition = main;
     for (const i of path) {
-      if (!("children" in def)) {
-        return null;
-      }
-      const nextChildren = def.children;
-      if (i >= nextChildren.length) {
-        return null;
-      }
-      def = nextChildren[i];
+      if (!("children" in definition)) return null;
+      const nextChildren = definition.children;
+      if (i >= nextChildren.length) return null;
+      definition = nextChildren[i];
     }
-    return def;
+    return definition;
   };
 
   // unison-components/dist/design-tokens.ts
@@ -817,16 +748,50 @@
   for (const name of Object.values(NAMED_FLAGS).flat()) add(name, { group: "other" });
   var FLAG_PREFIXES = new Set([...table.keys()].map((name) => name.split("-")[0]));
 
+  // src/maps.ts
+  var matchToken = (name, prefix, tokens) => {
+    if (name === void 0 || !name.startsWith(prefix)) return void 0;
+    const token = name.slice(prefix.length);
+    return tokens.has(token) ? token : void 0;
+  };
+  var COLOR_TOKENS = /* @__PURE__ */ new Set();
+  for (const [name, value] of Object.entries(COLORS)) {
+    if (typeof value === "string") {
+      COLOR_TOKENS.add(name);
+      continue;
+    }
+    for (const shade of Object.keys(value)) {
+      COLOR_TOKENS.add("".concat(name, "-").concat(shade));
+    }
+  }
+  var SPACING_TOKENS = new Set(Object.keys(SPACING));
+  var RADIUS_TOKENS = new Set(Object.keys(RADIUS));
+  var CONTAINER_TOKENS = new Set(Object.keys(CONTAINERS));
+  var SHADOW_TOKENS = /* @__PURE__ */ new Set(["none", ...SHADOWS]);
+  var TEXT_SIZE_TOKENS = new Set(TEXT_SIZES);
+  var resolveColorToken = (variableName) => matchToken(variableName, "fill-", COLOR_TOKENS);
+  var resolveSpacingToken = (variableName) => matchToken(variableName, "spacing-", SPACING_TOKENS);
+  var resolveRadiusToken = (variableName) => matchToken(variableName, "radius-", RADIUS_TOKENS);
+  var resolveContainerToken = (variableName) => matchToken(variableName, "container-", CONTAINER_TOKENS);
+  var resolveShadowToken = (styleName) => matchToken(styleName, "shadow-", SHADOW_TOKENS);
+  var resolveTextSizeToken = (styleName) => matchToken(styleName, "text-", TEXT_SIZE_TOKENS);
+  var buildSizingMap = (prefix) => {
+    const map = {};
+    for (const mode of SIZE_MODES) {
+      map[mode.toUpperCase()] = "".concat(prefix).concat(mode);
+    }
+    return map;
+  };
+  var WIDTH_SIZING = buildSizingMap("width-");
+  var HEIGHT_SIZING = buildSizingMap("height-");
+
   // src/utilities.ts
-  var _toHex = (n) => {
+  var toHex = (n) => {
     const clamped = Math.max(0, Math.min(255, Math.round(n)));
     const hex = clamped.toString(16).toUpperCase();
     return hex.length === 1 ? "0".concat(hex) : hex;
   };
-  var RGBToHEX = (rgb) => {
-    const scale = rgb.r <= 1 && rgb.g <= 1 && rgb.b <= 1 ? 255 : 1;
-    return "#".concat(_toHex(rgb.r * scale)).concat(_toHex(rgb.g * scale)).concat(_toHex(rgb.b * scale));
-  };
+  var RGBToHEX = (rgb) => "#".concat(toHex(rgb.r * 255)).concat(toHex(rgb.g * 255)).concat(toHex(rgb.b * 255));
   var INDENT = " ".repeat(4);
   var META_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "children", "characters"]);
   var STRING_PROP_KEYS = {
@@ -863,7 +828,7 @@
     "stroke-hover-",
     "effect-"
   ];
-  var _panelRank = (flag) => {
+  var getPanelRank = (flag) => {
     let rank = PANEL_ORDER.length;
     let length = 0;
     for (const [i, prefix] of PANEL_ORDER.entries()) {
@@ -874,324 +839,129 @@
     }
     return rank;
   };
-  var _byPanelOrder = (a, b) => _panelRank(a) - _panelRank(b) || a.localeCompare(b);
+  var compareByPanelOrder = (a, b) => getPanelRank(a) - getPanelRank(b) || a.localeCompare(b);
   var SKIP_WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
-  var _booleanPropKeys = (properties) => Object.keys(properties).filter((k) => !META_KEYS.has(k) && !k.startsWith("OVERRIDE_") && properties[k] === true);
-  var _openTagPropKeys = (tag, properties) => {
-    const keys = _booleanPropKeys(properties);
-    if (tag !== "Frame") {
-      return keys;
-    }
-    const t = properties.type;
-    if (typeof t !== "string" || t.length === 0) {
-      return keys;
-    }
-    const typeKey = "type-".concat(t.toLowerCase().replace(/_/g, "-"));
-    const rest = keys.filter((k) => k !== typeKey);
-    return [...rest];
-  };
-  var _formatOpenTag = (tag, properties, indentation, selfClosing) => {
+  var getFlagKeys = (properties) => Object.keys(properties).filter((k) => !META_KEYS.has(k) && properties[k] === true);
+  var formatOpenTag = (tag, properties, indentation, selfClosing) => {
     var _a3;
-    const flags = _openTagPropKeys(tag, properties).sort(_byPanelOrder);
+    const flags = getFlagKeys(properties).sort(compareByPanelOrder);
     const attributes = ((_a3 = STRING_PROP_KEYS[tag]) != null ? _a3 : []).filter((k) => typeof properties[k] === "string").map((k) => "".concat(k, '="').concat(properties[k], '"'));
     const keys = [...flags, ...attributes];
-    if (keys.length === 0) {
-      return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
-    }
-    const lines = ["".concat(indentation, "<").concat(tag)];
-    for (const k of keys) {
-      lines.push("".concat(indentation, "  ").concat(k));
-    }
-    lines.push(selfClosing ? "".concat(indentation, "/>") : "".concat(indentation, ">"));
+    if (keys.length === 0) return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
+    const lines = [
+      "".concat(indentation, "<").concat(tag),
+      ...keys.map((k) => "".concat(indentation, "  ").concat(k)),
+      selfClosing ? "".concat(indentation, "/>") : "".concat(indentation, ">")
+    ];
     return lines.join("\n");
   };
-  var _resolveTag = (properties) => {
+  var resolveTag = (properties) => {
     if (properties.type === "TEXT") return "Text";
     if (properties.type === "VECTOR") return "Vector";
     if (properties.type === "ELLIPSE") return "Ellipse";
     if (properties.type === "RECTANGLE") return "Rectangle";
     return "Frame";
   };
-  var _renderComponentNode = (node, indentation) => {
+  var renderChildren = (children, indentation) => children.map((child) => renderNode(child, indentation)).filter((part) => part.length > 0).join("\n");
+  var renderNode = (node, indentation) => {
+    var _a3;
     const { properties } = node;
-    if ("EXCLUDE_FROM_OUTPUT" in properties && properties.EXCLUDE_FROM_OUTPUT === true) {
-      return "";
-    }
-    const tag = _resolveTag(properties);
-    const children = Array.isArray(properties.children) ? properties.children : [];
-    const t = properties.type;
-    if (typeof t === "string" && SKIP_WRAPPER_TYPES.has(t)) {
-      if (children.length === 0) {
-        return "";
-      }
-      const [first, ...rest] = children;
-      const parts2 = [_renderComponentNode(first, indentation)];
-      for (const child of rest) {
-        parts2.push(_renderComponentNode(child, indentation));
-      }
-      return parts2.filter((p) => p.length > 0).join("\n");
-    }
-    const keys = _openTagPropKeys(tag, properties);
-    if (tag === "Frame" && keys.length === 0) {
-      if (children.length === 0) {
-        return "";
-      }
-      const parts2 = [];
-      for (const child of children) {
-        parts2.push(_renderComponentNode(child, indentation));
-      }
-      return parts2.filter((p) => p.length > 0).join("\n");
-    }
+    if (properties.EXCLUDE_FROM_OUTPUT === true) return "";
+    const tag = resolveTag(properties);
+    const children = (_a3 = properties.children) != null ? _a3 : [];
+    const type = properties.type;
+    if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation);
+    if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation);
     const selfClosing = tag === "Ellipse" || tag === "Rectangle" || tag === "Vector";
-    const open = _formatOpenTag(tag, properties, indentation, selfClosing);
-    if (selfClosing) {
-      return open;
-    }
-    if (tag === "Text") {
+    const open = formatOpenTag(tag, properties, indentation, selfClosing);
+    if (selfClosing) return open;
+    if (tag === "Text")
       return [open, "".concat(indentation).concat(INDENT).concat(properties.characters), "".concat(indentation, "</Text>")].join("\n");
-    }
-    const parts = [open];
-    for (const child of children) {
-      parts.push(_renderComponentNode(child, "".concat(indentation).concat(INDENT)));
-    }
-    parts.push("".concat(indentation, "</").concat(tag, ">"));
+    const parts = [
+      open,
+      ...children.map((child) => renderNode(child, "".concat(indentation).concat(INDENT))),
+      "".concat(indentation, "</").concat(tag, ">")
+    ];
     return parts.join("\n");
   };
-  var renderComponentCode = (json) => _renderComponentNode(json, "");
-  var isHEX = (value) => value.startsWith("#");
-
-  // src/maps.ts
-  var isRgbHex = (value) => isHEX(value) && value.length === 7;
-  var COLOR_TOKENS = /* @__PURE__ */ new Set();
-  var HEX_OWNERS = /* @__PURE__ */ new Map();
-  var addHexOwner = (hex, token) => {
-    const owners = HEX_OWNERS.get(hex);
-    if (owners) {
-      owners.push(token);
-      return;
-    }
-    HEX_OWNERS.set(hex, [token]);
-  };
-  for (const [name, value] of Object.entries(COLORS)) {
-    if (typeof value === "string") {
-      COLOR_TOKENS.add(name);
-      if (isRgbHex(value)) {
-        addHexOwner(value, name);
-      }
-      continue;
-    }
-    for (const [shade, hex] of Object.entries(value)) {
-      COLOR_TOKENS.add("".concat(name, "-").concat(shade));
-      if (isRgbHex(hex)) {
-        addHexOwner(hex, "".concat(name, "-").concat(shade));
-      }
-    }
-  }
-  var UNIQUE_HEX_TO_TOKEN = {};
-  for (const [hex, tokens] of HEX_OWNERS) {
-    if (tokens.length === 1) {
-      UNIQUE_HEX_TO_TOKEN[hex] = tokens[0];
-    }
-  }
-  var normalizeColorName = (name) => name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/\//g, "-");
-  var resolveColorToken = (variableName, hex) => {
-    if (variableName) {
-      const candidate = normalizeColorName(variableName);
-      if (COLOR_TOKENS.has(candidate)) {
-        return candidate;
-      }
-      const parts = candidate.split("-");
-      for (let i = 1; i < parts.length; i++) {
-        const suffix = parts.slice(i).join("-");
-        if (COLOR_TOKENS.has(suffix)) {
-          return suffix;
-        }
-      }
-    }
-    if (hex && UNIQUE_HEX_TO_TOKEN[hex]) {
-      return UNIQUE_HEX_TO_TOKEN[hex];
-    }
-    return void 0;
-  };
-  var buildColorMap = (prefix) => {
-    const map2 = {};
-    for (const [hex, token] of Object.entries(UNIQUE_HEX_TO_TOKEN)) {
-      map2[hex] = "".concat(prefix).concat(token);
-    }
-    return map2;
-  };
-  var resolveColorClass = (prefix, variableName, hex) => {
-    const token = resolveColorToken(variableName, hex);
-    return token ? "".concat(prefix).concat(token) : void 0;
-  };
-  var mapStrokeColor = buildColorMap("stroke-");
-  var mapFillColor = buildColorMap("fill-");
-  var UNIT_TOKENS = /* @__PURE__ */ new Set([...Object.keys(SPACING), ...SIZE_MODES]);
-  var PIXEL_TO_TOKEN = {};
-  for (const [unit, pixels] of Object.entries(SPACING)) {
-    PIXEL_TO_TOKEN[pixels] = unit;
-  }
-  var normalizeUnitName = (name) => name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/(\d)\.(\d)/g, "$1p$2").replace(/\//g, "-").replace(/^05$/, "0p5").replace(/-05$/, "-0p5").replace(/(^|-)1px$/, "$1px");
-  var resolveUnitToken = (variableName, pixels) => {
-    if (variableName) {
-      const candidate = normalizeUnitName(variableName);
-      if (UNIT_TOKENS.has(candidate)) {
-        return candidate;
-      }
-      const parts = candidate.split("-");
-      for (let i = 1; i < parts.length; i++) {
-        const suffix = parts.slice(i).join("-");
-        if (UNIT_TOKENS.has(suffix)) {
-          return suffix;
-        }
-      }
-    }
-    if (pixels !== void 0 && PIXEL_TO_TOKEN[pixels]) {
-      return PIXEL_TO_TOKEN[pixels];
-    }
-    return void 0;
-  };
-  var resolveUnitClass = (prefix, variableName, pixels) => {
-    const token = resolveUnitToken(variableName, pixels);
-    return token ? "".concat(prefix).concat(token) : void 0;
-  };
-  var buildUnitMap = (prefix) => {
-    const map2 = {};
-    for (const [pixels, token] of Object.entries(PIXEL_TO_TOKEN)) {
-      map2[Number(pixels)] = "".concat(prefix).concat(token);
-    }
-    return map2;
-  };
-  var buildSizingMap = (prefix) => {
-    const map2 = {};
-    for (const mode of SIZE_MODES) {
-      map2[mode.toUpperCase()] = "".concat(prefix).concat(mode);
-    }
-    return map2;
-  };
-  var mapAbsoluteWidth = buildUnitMap("width-");
-  var mapAbsoluteHeight = buildUnitMap("height-");
-  var mapWidth = buildSizingMap("width-");
-  var mapHeight = buildSizingMap("height-");
-  var mapGap = buildUnitMap("gap-");
-  var mapPadding = buildUnitMap("padding-");
-  var mapPaddingVertical = buildUnitMap("padding-vertical-");
-  var mapPaddingHorizontal = buildUnitMap("padding-horizontal-");
-  var mapPaddingLeft = buildUnitMap("padding-left-");
-  var mapPaddingRight = buildUnitMap("padding-right-");
-  var mapPaddingTop = buildUnitMap("padding-top-");
-  var mapPaddingBottom = buildUnitMap("padding-bottom-");
-  var RADIUS_TOKENS = new Set(Object.keys(RADIUS));
-  var PIXEL_TO_RADIUS = {};
-  for (const [name, pixels] of Object.entries(RADIUS)) {
-    PIXEL_TO_RADIUS[pixels] = name;
-  }
-  var matchTokenSuffix = (candidate, tokens) => {
-    if (tokens.has(candidate)) {
-      return candidate;
-    }
-    const parts = candidate.split("-");
-    for (let i = 1; i < parts.length; i++) {
-      const suffix = parts.slice(i).join("-");
-      if (tokens.has(suffix)) {
-        return suffix;
-      }
-    }
-    return void 0;
-  };
-  var normalizeStyleName = (name) => name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/\//g, "-");
-  var resolveRadiusToken = (variableName, pixels) => {
-    const named = variableName ? matchTokenSuffix(normalizeStyleName(variableName), RADIUS_TOKENS) : void 0;
-    if (named) {
-      return named;
-    }
-    return pixels !== void 0 ? PIXEL_TO_RADIUS[pixels] : void 0;
-  };
-  var resolveContainerToken = (variableName) => {
-    var _a3;
-    const [, key] = (_a3 = normalizeStyleName(variableName != null ? variableName : "").match(/(?:^|-)container-(.+)$/)) != null ? _a3 : [];
-    return key !== void 0 && key in CONTAINERS ? key : void 0;
-  };
-  var SHADOW_TOKENS = /* @__PURE__ */ new Set(["none", "small", "large", ...SHADOWS]);
-  var resolveShadowToken = (styleName) => matchTokenSuffix(normalizeStyleName(styleName), SHADOW_TOKENS);
+  var renderComponentCode = (json) => renderNode(json, "");
+  var MAX_NAME_LENGTH = 15;
+  var truncateName = (name) => name.length > MAX_NAME_LENGTH ? "".concat(name.slice(0, MAX_NAME_LENGTH), "\u2026") : name;
 
   // src/read/variable.ts
-  var variableById = /* @__PURE__ */ new Map();
+  var VARIABLE_BY_ID_CACHE = /* @__PURE__ */ new Map();
   var getVariable = (id) => {
-    const existing = variableById.get(id);
-    if (existing) {
-      return existing;
-    }
+    const existing = VARIABLE_BY_ID_CACHE.get(id);
+    if (existing) return existing;
     const next = figma.variables.getVariableByIdAsync(id);
-    variableById.set(id, next);
+    VARIABLE_BY_ID_CACHE.set(id, next);
     return next;
   };
 
   // src/read/unit.ts
-  var resolveBoundUnitClass = async (prefix, alias, pixels) => {
+  var getVariableName = async (alias) => {
     const variable = (alias == null ? void 0 : alias.id) ? await getVariable(alias.id) : null;
-    return resolveUnitClass(prefix, variable == null ? void 0 : variable.name, pixels);
+    return variable == null ? void 0 : variable.name;
   };
-  var resolveBoundRadiusClass = async (prefix, alias, pixels) => {
-    const variable = (alias == null ? void 0 : alias.id) ? await getVariable(alias.id) : null;
-    const token = resolveRadiusToken(variable == null ? void 0 : variable.name, pixels);
-    return token ? "".concat(prefix).concat(token) : void 0;
+  var resolveBoundUnitClass = async (prefix, alias) => {
+    const token = resolveSpacingToken(await getVariableName(alias));
+    return token === void 0 ? void 0 : "".concat(prefix).concat(token);
   };
-  var resolveBoundWidthClass = async (alias, pixels) => {
-    const variable = (alias == null ? void 0 : alias.id) ? await getVariable(alias.id) : null;
-    const container = resolveContainerToken(variable == null ? void 0 : variable.name);
-    return container ? "width-".concat(container) : resolveUnitClass("width-", variable == null ? void 0 : variable.name, pixels);
+  var resolveBoundRadiusClass = async (prefix, alias) => {
+    const token = resolveRadiusToken(await getVariableName(alias));
+    return token === void 0 ? void 0 : "".concat(prefix).concat(token);
+  };
+  var resolveBoundWidthClass = async (alias) => {
+    const name = await getVariableName(alias);
+    const container = resolveContainerToken(name);
+    const spacing = resolveSpacingToken(name);
+    if (container !== void 0) return "width-".concat(container);
+    return spacing === void 0 ? void 0 : "width-".concat(spacing);
   };
 
   // src/read/dimensions.ts
+  var readSize = async (node, label, sizing, bound, resolveFixedClass, sizingFlags, errors) => {
+    if (sizing === "FIXED" && bound) {
+      const className = await resolveFixedClass(bound);
+      if (className === void 0) {
+        errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not a token") });
+      }
+      return className;
+    }
+    if (sizing === "FIXED") {
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not bound") });
+      return void 0;
+    }
+    if (sizing !== "FILL" && sizing !== "HUG") {
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": must be fill or hug") });
+      return void 0;
+    }
+    return sizingFlags[sizing];
+  };
   var readDimensions = async (node) => {
     var _a3, _b;
     const properties = {};
     const errors = [];
-    if (node.type !== "VECTOR") {
-      const layoutSizingHorizontal = node.layoutSizingHorizontal;
-      const layoutSizingVertical = node.layoutSizingVertical;
-      if (node.layoutSizingHorizontal === "FIXED") {
-        if ((_a3 = node.boundVariables) == null ? void 0 : _a3.width) {
-          const className = await resolveBoundWidthClass(node.boundVariables.width, node.width);
-          if (className) {
-            properties[className] = true;
-          }
-        } else {
-          errors.push({
-            nodeId: node.id,
-            message: "Error @ ".concat(node.name, " \u2013 WIDTH value is not bound to a variable.")
-          });
-        }
-      } else if (layoutSizingHorizontal !== "FILL" && layoutSizingHorizontal !== "HUG") {
-        errors.push({
-          nodeId: node.id,
-          message: "Error @ ".concat(node.name, ' \u2013 WIDTH value must be "fill" or "hug".')
-        });
-      } else {
-        properties[mapWidth[layoutSizingHorizontal]] = true;
-      }
-      if (node.layoutSizingVertical === "FIXED") {
-        if ((_b = node.boundVariables) == null ? void 0 : _b.height) {
-          const className = await resolveBoundUnitClass("height-", node.boundVariables.height, node.height);
-          if (className) {
-            properties[className] = true;
-          }
-        } else {
-          errors.push({
-            nodeId: node.id,
-            message: "Error @ ".concat(node.name, " \u2013 HEIGHT value is not bound to a variable.")
-          });
-        }
-      } else if (layoutSizingVertical !== "FILL" && layoutSizingVertical !== "HUG") {
-        errors.push({
-          nodeId: node.id,
-          message: "Error @ ".concat(node.name, ' \u2013 HEIGHT value must be "fill" or "hug".')
-        });
-      } else {
-        properties[mapHeight[layoutSizingVertical]] = true;
-      }
-    }
+    const width = await readSize(
+      node,
+      "WIDTH",
+      node.layoutSizingHorizontal,
+      (_a3 = node.boundVariables) == null ? void 0 : _a3.width,
+      resolveBoundWidthClass,
+      WIDTH_SIZING,
+      errors
+    );
+    const height = await readSize(
+      node,
+      "HEIGHT",
+      node.layoutSizingVertical,
+      (_b = node.boundVariables) == null ? void 0 : _b.height,
+      (bound) => resolveBoundUnitClass("height-", bound),
+      HEIGHT_SIZING,
+      errors
+    );
+    if (width) properties[width] = true;
+    if (height) properties[height] = true;
     return { properties, errors, warnings: [] };
   };
 
@@ -1200,58 +970,54 @@
     var _a3, _b, _c;
     const id = (_b = (_a3 = paint.boundVariables) == null ? void 0 : _a3.color) == null ? void 0 : _b.id;
     const variable = id ? await getVariable(id) : null;
-    const hex = RGBToHEX(paint.color);
-    const className = resolveColorClass(prefix, variable == null ? void 0 : variable.name, hex);
-    return { className, label: (_c = variable == null ? void 0 : variable.name) != null ? _c : hex };
+    const token = resolveColorToken(variable == null ? void 0 : variable.name);
+    const className = token === void 0 ? void 0 : "".concat(prefix).concat(token);
+    return { className, label: (_c = variable == null ? void 0 : variable.name) != null ? _c : RGBToHEX(paint.color) };
+  };
+  var readPaint = async (node, kind, paint) => {
+    var _a3;
+    const name = kind.toLowerCase();
+    if (paint === void 0) return { properties: {}, errors: [], warnings: [] };
+    if (paint.type !== "SOLID") {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(kind, ": unsupported (").concat(paint.type, ")") }],
+        warnings: []
+      };
+    }
+    if (((_a3 = paint.boundVariables) == null ? void 0 : _a3.color) === void 0) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(kind, ": not bound") }],
+        warnings: []
+      };
+    }
+    if (!paint.visible) {
+      return {
+        properties: {},
+        errors: [],
+        warnings: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(kind, ": hidden") }]
+      };
+    }
+    const { className, label } = await resolveBoundPaintColor("".concat(name, "-"), paint);
+    if (className) return { properties: { [className]: true }, errors: [], warnings: [] };
+    return {
+      properties: {},
+      errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(kind, ": not a token (").concat(label, ")") }],
+      warnings: []
+    };
   };
 
   // src/read/fill.ts
   var readFill = async (node) => {
-    var _a3, _b;
-    const properties = {};
-    const errors = [];
-    const warnings = [];
     if (node.fills === figma.mixed) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 FILL mixed values are not supported.")
-      });
-    } else if (node.fills[0]) {
-      const fill = (_a3 = node.fills) == null ? void 0 : _a3[0];
-      const type = fill.type;
-      const visible = fill.visible;
-      if (type !== "SOLID") {
-        errors.push({
-          nodeId: node.id,
-          message: "Error @ ".concat(node.name, " \u2013 FILL only solid fill values are supported.")
-        });
-      } else {
-        if (typeof ((_b = fill.boundVariables) == null ? void 0 : _b.color) === "undefined") {
-          errors.push({
-            nodeId: node.id,
-            message: "Error @ ".concat(node.name, " \u2013 FILL value is not bound to a variable.")
-          });
-        } else {
-          if (!visible) {
-            warnings.push({
-              nodeId: node.id,
-              message: "Notice @ ".concat(node.name, " \u2013 FILL is hidden.")
-            });
-          } else {
-            const { className, label } = await resolveBoundPaintColor("fill-", fill);
-            if (className) {
-              properties[className] = true;
-            } else {
-              errors.push({
-                nodeId: node.id,
-                message: "Error @ ".concat(node.name, ' \u2013 FILL color "').concat(label, '" is not a known color.')
-              });
-            }
-          }
-        }
-      }
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 FILL: mixed") }],
+        warnings: []
+      };
     }
-    return { properties, errors, warnings };
+    return readPaint(node, "FILL", node.fills[0]);
   };
 
   // src/read/identity.ts
@@ -1265,51 +1031,14 @@
 
   // src/read/stroke.ts
   var readStroke = async (node) => {
-    var _a3, _b, _c;
-    const properties = {};
-    const errors = [];
-    const warnings = [];
-    if (((_a3 = node.strokes) == null ? void 0 : _a3.length) > 1) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 STROKE mixed values are not supported.")
-      });
-    } else if (node.strokes[0]) {
-      const stroke = (_b = node.strokes) == null ? void 0 : _b[0];
-      const type = stroke.type;
-      const visible = stroke.visible;
-      if (type !== "SOLID") {
-        errors.push({
-          nodeId: node.id,
-          message: "Error @ ".concat(node.name, " \u2013 STROKE only solid stroke values are supported.")
-        });
-      } else {
-        if (typeof ((_c = stroke.boundVariables) == null ? void 0 : _c.color) === "undefined") {
-          errors.push({
-            nodeId: node.id,
-            message: "Error @ ".concat(node.name, " \u2013 STROKE value is not bound to a variable.")
-          });
-        } else {
-          if (!visible) {
-            warnings.push({
-              nodeId: node.id,
-              message: "Notice @ ".concat(node.name, " \u2013 STROKE is hidden.")
-            });
-          } else {
-            const { className, label } = await resolveBoundPaintColor("stroke-", stroke);
-            if (className) {
-              properties[className] = true;
-            } else {
-              errors.push({
-                nodeId: node.id,
-                message: "Error @ ".concat(node.name, ' \u2013 STROKE color "').concat(label, '" is not a known color.')
-              });
-            }
-          }
-        }
-      }
+    if (node.strokes.length > 1) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 STROKE: mixed") }],
+        warnings: []
+      };
     }
-    return { properties, errors, warnings };
+    return readPaint(node, "STROKE", node.strokes[0]);
   };
 
   // src/serialize/ellipse.ts
@@ -1321,13 +1050,13 @@
       properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), dimensions.properties), fill.properties), stroke.properties), {
         "corner-radius-full": true
       }),
-      errors: [],
-      warnings: []
+      errors: [...dimensions.errors, ...fill.errors, ...stroke.errors],
+      warnings: [...dimensions.warnings, ...fill.warnings, ...stroke.warnings]
     };
   };
 
   // src/read/alignment.ts
-  var mapFrame = {
+  var FRAME_ALIGNMENT = {
     HORIZONTAL_MIN_MIN: "alignment-top-left",
     HORIZONTAL_MIN_CENTER: "alignment-left",
     HORIZONTAL_MIN_MAX: "alignment-bottom-left",
@@ -1365,48 +1094,52 @@
     const properties = {};
     const errors = [];
     if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
-      properties[mapFrame["".concat(node.layoutMode, "_").concat(node.primaryAxisAlignItems, "_").concat(node.counterAxisAlignItems)]] = true;
+      properties[FRAME_ALIGNMENT["".concat(node.layoutMode, "_").concat(node.primaryAxisAlignItems, "_").concat(node.counterAxisAlignItems)]] = true;
     }
     return { properties, errors, warnings: [] };
   };
-  var mapText = {
+  var TEXT_ALIGNMENT = {
     LEFT: "typography-align-left",
     CENTER: "typography-align-center",
     RIGHT: "typography-align-right"
   };
   var readAlignmentText = (node) => {
-    const properties = {};
-    const errors = [];
-    if (node.textAlignHorizontal === "LEFT" || node.textAlignHorizontal === "CENTER" || node.textAlignHorizontal === "RIGHT") {
-      properties[mapText[node.textAlignHorizontal]] = true;
-    } else {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, ' \u2013 TEXT alignment must be "left", "center" or "right".')
-      });
+    const alignment = node.textAlignHorizontal;
+    if (alignment === "LEFT" || alignment === "CENTER" || alignment === "RIGHT") {
+      return { properties: { [TEXT_ALIGNMENT[alignment]]: true }, errors: [], warnings: [] };
     }
-    return { properties, errors, warnings: [] };
+    return {
+      properties: {},
+      errors: [
+        { nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 TEXT ALIGNMENT: must be left, center or right") }
+      ],
+      warnings: []
+    };
   };
 
   // src/read/cornerRadius.ts
   var hasDiscreteCorners = (node) => "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node;
-  var unboundMessage = (node, label) => label ? "Error @ ".concat(node.name, " \u2013 CORNER RADIUS ").concat(label, " value is not bound to a variable.") : "Error @ ".concat(node.name, " \u2013 CORNER RADIUS value is not bound to a variable.");
+  var formatCornerError = (node, problem, label) => "".concat(truncateName(node.name), " \u2013 CORNER RADIUS").concat(label ? " ".concat(label) : "", ": ").concat(problem);
   var emitCorner = async (node, prefix, value, bound, properties, errors, label) => {
     if (value > 0 && bound === void 0) {
       errors.push({
         nodeId: node.id,
-        message: unboundMessage(node, label)
+        message: formatCornerError(node, "not bound", label)
       });
       return;
     }
-    const className = await resolveBoundRadiusClass(prefix, bound, value);
+    if (value === 0 && bound === void 0) {
+      properties["".concat(prefix, "none")] = true;
+      return;
+    }
+    const className = await resolveBoundRadiusClass(prefix, bound);
     if (className) {
       properties[className] = true;
       return;
     }
     errors.push({
       nodeId: node.id,
-      message: label ? "Error @ ".concat(node.name, " \u2013 CORNER RADIUS ").concat(label, " value does not match a radius token.") : "Error @ ".concat(node.name, " \u2013 CORNER RADIUS value does not match a radius token.")
+      message: formatCornerError(node, "not a token", label)
     });
   };
   var readDiscreteCorners = async (node) => {
@@ -1418,25 +1151,25 @@
         value: node.topLeftRadius,
         bound: (_a3 = node.boundVariables) == null ? void 0 : _a3.topLeftRadius,
         prefix: "corner-radius-top-left-",
-        label: "top left"
+        label: "TOP LEFT"
       },
       {
         value: node.topRightRadius,
         bound: (_b = node.boundVariables) == null ? void 0 : _b.topRightRadius,
         prefix: "corner-radius-top-right-",
-        label: "top right"
+        label: "TOP RIGHT"
       },
       {
         value: node.bottomLeftRadius,
         bound: (_c = node.boundVariables) == null ? void 0 : _c.bottomLeftRadius,
         prefix: "corner-radius-bottom-left-",
-        label: "bottom left"
+        label: "BOTTOM LEFT"
       },
       {
         value: node.bottomRightRadius,
         bound: (_d = node.boundVariables) == null ? void 0 : _d.bottomRightRadius,
         prefix: "corner-radius-bottom-right-",
-        label: "bottom right"
+        label: "BOTTOM RIGHT"
       }
     ];
     const counts = /* @__PURE__ */ new Map();
@@ -1451,17 +1184,16 @@
         baseCount = count;
       }
     }
+    if (baseCount === 4 && baseValue <= 0) return { properties, errors, warnings: [] };
+    if (baseCount === 4 && corners.some((corner) => corner.bound === void 0)) {
+      errors.push({
+        nodeId: node.id,
+        message: formatCornerError(node, "not bound")
+      });
+      return { properties, errors, warnings: [] };
+    }
     if (baseCount === 4) {
-      if (baseValue > 0) {
-        if (corners.some((corner) => corner.bound === void 0)) {
-          errors.push({
-            nodeId: node.id,
-            message: unboundMessage(node)
-          });
-        } else {
-          await emitCorner(node, "corner-radius-", baseValue, corners[0].bound, properties, errors);
-        }
-      }
+      await emitCorner(node, "corner-radius-", baseValue, corners[0].bound, properties, errors);
       return { properties, errors, warnings: [] };
     }
     const base = corners.find((corner) => corner.value === baseValue);
@@ -1469,34 +1201,30 @@
     if (useBase) {
       await emitCorner(node, "corner-radius-", baseValue, base.bound, properties, errors);
       for (const corner of corners) {
-        if (corner.value === baseValue) {
-          continue;
-        }
+        if (corner.value === baseValue) continue;
         await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
       }
-    } else {
-      for (const corner of corners) {
-        if (corner.value <= 0) {
-          continue;
-        }
-        await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
-      }
+      return { properties, errors, warnings: [] };
+    }
+    for (const corner of corners) {
+      if (corner.value <= 0) continue;
+      await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
     }
     return { properties, errors, warnings: [] };
   };
   var readCornerRadius = async (node) => {
     var _a3;
-    if (hasDiscreteCorners(node)) {
-      return readDiscreteCorners(node);
+    if (hasDiscreteCorners(node)) return readDiscreteCorners(node);
+    if (node.cornerRadius === figma.mixed) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 CORNER RADIUS: mixed") }],
+        warnings: []
+      };
     }
     const properties = {};
     const errors = [];
-    if (node.cornerRadius === figma.mixed) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 CORNER RADIUS values cannot be mixed.")
-      });
-    } else if (node.cornerRadius > 0) {
+    if (node.cornerRadius > 0) {
       await emitCorner(node, "corner-radius-", node.cornerRadius, (_a3 = node.boundVariables) == null ? void 0 : _a3.topLeftRadius, properties, errors);
     }
     return { properties, errors, warnings: [] };
@@ -1505,203 +1233,129 @@
   // src/read/effect.ts
   var readEffect = async (node) => {
     var _a3;
-    const properties = {};
-    const errors = [];
-    const warnings = [];
-    const visible = node.effects.filter((effect) => effect.visible);
-    if (visible.length === 0) {
-      return { properties, errors, warnings };
-    }
+    if (!node.effects.some((effect) => effect.visible)) return { properties: {}, errors: [], warnings: [] };
     if (node.effectStyleId === "") {
-      warnings.push({
-        nodeId: node.id,
-        message: "Notice @ ".concat(node.name, " \u2013 EFFECT is not bound to an effect style and is skipped.")
-      });
-      return { properties, errors, warnings };
+      return {
+        properties: {},
+        errors: [],
+        warnings: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 EFFECT: not bound, skipped") }]
+      };
     }
     const style = await figma.getStyleByIdAsync(node.effectStyleId);
     const token = style ? resolveShadowToken(style.name) : void 0;
     if (token === void 0) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, ' \u2013 EFFECT style "').concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.effectStyleId, '" does not match a shadow token.')
-      });
-    } else {
-      properties["effect-shadow-".concat(token)] = true;
+      return {
+        properties: {},
+        errors: [
+          {
+            nodeId: node.id,
+            message: "".concat(truncateName(node.name), " \u2013 EFFECT: not a token (").concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.effectStyleId, ")")
+          }
+        ],
+        warnings: []
+      };
     }
-    return { properties, errors, warnings };
+    return { properties: { ["effect-shadow-".concat(token)]: true }, errors: [], warnings: [] };
   };
 
   // src/read/gap.ts
-  var readSpacing = async (node, label, pixels, bound, errors) => {
-    if (pixels === 1) return "px";
+  var readSpacing = async (node, label, bound, errors) => {
     if (bound === void 0) {
-      errors.push({ nodeId: node.id, message: "Error @ ".concat(node.name, " \u2013 ").concat(label, " value is not bound to a variable.") });
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not bound") });
       return void 0;
     }
-    return resolveBoundUnitClass("", bound, pixels);
+    const suffix = await resolveBoundUnitClass("", bound);
+    if (suffix === void 0) {
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not a token") });
+    }
+    return suffix;
   };
   var readGap = async (node) => {
     var _a3, _b;
     const properties = {};
     const errors = [];
-    const items = node.itemSpacing > 0 ? await readSpacing(node, "GAP", node.itemSpacing, (_a3 = node.boundVariables) == null ? void 0 : _a3.itemSpacing, errors) : void 0;
+    const items = node.itemSpacing > 0 ? await readSpacing(node, "GAP", (_a3 = node.boundVariables) == null ? void 0 : _a3.itemSpacing, errors) : void 0;
     const rowSpacing = node.layoutWrap === "WRAP" ? node.counterAxisSpacing : null;
-    const rows = rowSpacing !== null && rowSpacing > 0 ? await readSpacing(node, "GAP vertical", rowSpacing, (_b = node.boundVariables) == null ? void 0 : _b.counterAxisSpacing, errors) : void 0;
-    if (rows === void 0 || rows === items) {
-      if (items !== void 0) properties["gap-".concat(items)] = true;
-    } else {
-      if (items !== void 0) properties["gap-horizontal-".concat(items)] = true;
-      properties["gap-vertical-".concat(rows)] = true;
-    }
+    const rows = rowSpacing !== null && rowSpacing > 0 ? await readSpacing(node, "GAP VERTICAL", (_b = node.boundVariables) == null ? void 0 : _b.counterAxisSpacing, errors) : void 0;
+    const sameSpacing = rows === void 0 || rows === items;
+    if (sameSpacing && items !== void 0) properties["gap-".concat(items)] = true;
+    if (!sameSpacing && items !== void 0) properties["gap-horizontal-".concat(items)] = true;
+    if (!sameSpacing) properties["gap-vertical-".concat(rows)] = true;
     return { properties, errors, warnings: [] };
   };
 
   // src/read/layout.ts
-  var map = {
+  var LAYOUT_MODE_FLAGS = {
     HORIZONTAL: "autolayout-horizontal",
     VERTICAL: "autolayout-vertical"
   };
   var readLayout = (node) => {
-    const properties = {};
-    const errors = [];
-    const flag = map[node.layoutMode];
+    const flag = LAYOUT_MODE_FLAGS[node.layoutMode];
     if (!flag) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 FRAME has no auto layout."),
-        always: true
-      });
-    } else {
-      properties[flag] = true;
-      if (node.layoutMode === "HORIZONTAL" && node.layoutWrap === "WRAP") {
-        properties.wrap = true;
-      }
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 AUTO LAYOUT: missing"), always: true }],
+        warnings: []
+      };
     }
-    return { properties, errors, warnings: [] };
+    const properties = { [flag]: true };
+    if (node.layoutMode === "HORIZONTAL" && node.layoutWrap === "WRAP") properties.wrap = true;
+    return { properties, errors: [], warnings: [] };
   };
 
   // src/read/padding.ts
   var readPadding = async (node) => {
-    var _a3, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
     const properties = {};
     const errors = [];
-    let paddingVertical = 0;
-    let paddingHorizontal = 0;
-    if (node.paddingLeft === node.paddingRight && node.paddingLeft > 0 && node.paddingRight > 0) {
-      if (((_a3 = node.boundVariables) == null ? void 0 : _a3.paddingLeft) === void 0 || ((_b = node.boundVariables) == null ? void 0 : _b.paddingRight) === void 0) {
-        errors.push({
-          nodeId: node.id,
-          message: "Error @ ".concat(node.name, " \u2013 PADDING vertical value not bound to a variable.")
-        });
-      } else {
-        paddingHorizontal = node.paddingLeft;
-      }
-    }
-    if (node.paddingTop === node.paddingBottom && node.paddingTop > 0 && node.paddingBottom > 0) {
-      if (((_c = node.boundVariables) == null ? void 0 : _c.paddingTop) === void 0 || ((_d = node.boundVariables) == null ? void 0 : _d.paddingBottom) === void 0) {
-        errors.push({
-          nodeId: node.id,
-          message: "Error @ ".concat(node.name, " \u2013 PADDING horizontal value not bound to a variable.")
-        });
-      } else {
-        paddingVertical = node.paddingTop;
-      }
-    }
-    if (paddingHorizontal === 0 && node.paddingLeft > 0 && ((_e = node.boundVariables) == null ? void 0 : _e.paddingLeft) === void 0) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 PADDING left value is not bound to a variable.")
-      });
-    }
-    if (paddingHorizontal === 0 && node.paddingRight > 0 && ((_f = node.boundVariables) == null ? void 0 : _f.paddingRight) === void 0) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 PADDING right value is not bound to a variable.")
-      });
-    }
-    if (paddingVertical === 0 && node.paddingTop > 0 && ((_g = node.boundVariables) == null ? void 0 : _g.paddingTop) === void 0) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 PADDING top value is not bound to a variable.")
-      });
-    }
-    if (paddingVertical === 0 && node.paddingBottom > 0 && ((_h = node.boundVariables) == null ? void 0 : _h.paddingBottom) === void 0) {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 PADDING bottom value is not bound to a variable.")
-      });
-    }
-    if (paddingHorizontal > 0 && paddingVertical > 0 && paddingHorizontal === paddingVertical) {
-      const className = await resolveBoundUnitClass("padding-", (_i = node.boundVariables) == null ? void 0 : _i.paddingLeft, paddingHorizontal);
+    const { paddingLeft: left, paddingRight: right, paddingTop: top, paddingBottom: bottom } = node;
+    const bound = node.boundVariables;
+    const addClass = async (prefix, label, alias) => {
+      if (alias === void 0) return;
+      const className = await resolveBoundUnitClass(prefix, alias);
       if (className) {
         properties[className] = true;
+        return;
       }
-    } else {
-      if (paddingHorizontal > 0) {
-        const className = await resolveBoundUnitClass(
-          "padding-horizontal-",
-          (_j = node.boundVariables) == null ? void 0 : _j.paddingLeft,
-          paddingHorizontal
-        );
-        if (className) {
-          properties[className] = true;
-        }
-      } else {
-        if (node.paddingLeft > 0) {
-          const className = await resolveBoundUnitClass(
-            "padding-left-",
-            (_k = node.boundVariables) == null ? void 0 : _k.paddingLeft,
-            node.paddingLeft
-          );
-          if (className) {
-            properties[className] = true;
-          }
-        }
-        if (node.paddingRight > 0) {
-          const className = await resolveBoundUnitClass(
-            "padding-right-",
-            (_l = node.boundVariables) == null ? void 0 : _l.paddingRight,
-            node.paddingRight
-          );
-          if (className) {
-            properties[className] = true;
-          }
-        }
-      }
-      if (paddingVertical > 0) {
-        const className = await resolveBoundUnitClass(
-          "padding-vertical-",
-          (_m = node.boundVariables) == null ? void 0 : _m.paddingTop,
-          paddingVertical
-        );
-        if (className) {
-          properties[className] = true;
-        }
-      } else {
-        if (node.paddingTop > 0) {
-          const className = await resolveBoundUnitClass("padding-top-", (_n = node.boundVariables) == null ? void 0 : _n.paddingTop, node.paddingTop);
-          if (className) {
-            properties[className] = true;
-          }
-        }
-        if (node.paddingBottom > 0) {
-          const className = await resolveBoundUnitClass(
-            "padding-bottom-",
-            (_o = node.boundVariables) == null ? void 0 : _o.paddingBottom,
-            node.paddingBottom
-          );
-          if (className) {
-            properties[className] = true;
-          }
-        }
-      }
-    }
-    return {
-      properties,
-      errors,
-      warnings: []
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not a token") });
     };
+    const horizontalPair = left === right && left > 0;
+    const horizontalBound = (bound == null ? void 0 : bound.paddingLeft) !== void 0 && (bound == null ? void 0 : bound.paddingRight) !== void 0;
+    const verticalPair = top === bottom && top > 0;
+    const verticalBound = (bound == null ? void 0 : bound.paddingTop) !== void 0 && (bound == null ? void 0 : bound.paddingBottom) !== void 0;
+    const paddingHorizontal = horizontalPair && horizontalBound ? left : 0;
+    const paddingVertical = verticalPair && verticalBound ? top : 0;
+    if (horizontalPair && !horizontalBound) {
+      errors.push({
+        nodeId: node.id,
+        message: "".concat(truncateName(node.name), " \u2013 PADDING HORIZONTAL: not bound")
+      });
+    }
+    if (verticalPair && !verticalBound) {
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING VERTICAL: not bound") });
+    }
+    if (paddingHorizontal === 0 && left > 0 && (bound == null ? void 0 : bound.paddingLeft) === void 0) {
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING LEFT: not bound") });
+    }
+    if (paddingHorizontal === 0 && right > 0 && (bound == null ? void 0 : bound.paddingRight) === void 0) {
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING RIGHT: not bound") });
+    }
+    if (paddingVertical === 0 && top > 0 && (bound == null ? void 0 : bound.paddingTop) === void 0) {
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING TOP: not bound") });
+    }
+    if (paddingVertical === 0 && bottom > 0 && (bound == null ? void 0 : bound.paddingBottom) === void 0) {
+      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING BOTTOM: not bound") });
+    }
+    if (paddingHorizontal > 0 && paddingHorizontal === paddingVertical) {
+      await addClass("padding-", "PADDING", bound == null ? void 0 : bound.paddingLeft);
+      return { properties, errors, warnings: [] };
+    }
+    if (paddingHorizontal > 0) await addClass("padding-horizontal-", "PADDING HORIZONTAL", bound == null ? void 0 : bound.paddingLeft);
+    if (paddingHorizontal === 0 && left > 0) await addClass("padding-left-", "PADDING LEFT", bound == null ? void 0 : bound.paddingLeft);
+    if (paddingHorizontal === 0 && right > 0) await addClass("padding-right-", "PADDING RIGHT", bound == null ? void 0 : bound.paddingRight);
+    if (paddingVertical > 0) await addClass("padding-vertical-", "PADDING VERTICAL", bound == null ? void 0 : bound.paddingTop);
+    if (paddingVertical === 0 && top > 0) await addClass("padding-top-", "PADDING TOP", bound == null ? void 0 : bound.paddingTop);
+    if (paddingVertical === 0 && bottom > 0) await addClass("padding-bottom-", "PADDING BOTTOM", bound == null ? void 0 : bound.paddingBottom);
+    return { properties, errors, warnings: [] };
   };
 
   // src/serialize/frame.ts
@@ -1760,7 +1414,7 @@
       warnings: [
         {
           nodeId: node.id,
-          message: 'Notice @ "'.concat(node.name, '" \u2013 GROUP converted to frame.')
+          message: "".concat(truncateName(node.name), " \u2013 GROUP: converted to frame")
         }
       ]
     };
@@ -1774,34 +1428,44 @@
     const cornerRadius = await readCornerRadius(node);
     return {
       properties: __spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), dimensions.properties), fill.properties), stroke.properties), cornerRadius.properties),
-      errors: [],
-      warnings: []
+      // In the order of Figma's right panel, like the rendered flags.
+      errors: [...dimensions.errors, ...cornerRadius.errors, ...fill.errors, ...stroke.errors],
+      warnings: [...dimensions.warnings, ...cornerRadius.warnings, ...fill.warnings, ...stroke.warnings]
     };
   };
 
   // src/read/typography.ts
   var readTypography = async (node) => {
     var _a3;
-    const properties = {};
-    const errors = [];
-    if (node.textStyleId === void 0) {
-      errors.push({
-        nodeId: node.id,
-        message: 'Error @ "'.concat(node.name, '" \u2013 TYPOGRAPHY not bound to a text style.')
-      });
-    } else if (node.textStyleId === figma.mixed) {
-      errors.push({
-        nodeId: node.id,
-        message: 'Error @ "'.concat(node.name, '" \u2013 TYPOGRAPHY mixed.')
-      });
-    } else {
-      const textStyle = await figma.getStyleByIdAsync(node.textStyleId);
-      if (textStyle) {
-        const size = (_a3 = textStyle.name.match(/^text-(.+)$/)) == null ? void 0 : _a3[1];
-        properties["typography-".concat(size != null ? size : textStyle.name)] = true;
-      }
+    if (node.textStyleId === "") {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 TYPOGRAPHY: not bound") }],
+        warnings: []
+      };
     }
-    return { properties, errors, warnings: [] };
+    if (node.textStyleId === figma.mixed) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 TYPOGRAPHY: mixed") }],
+        warnings: []
+      };
+    }
+    const style = await figma.getStyleByIdAsync(node.textStyleId);
+    const size = style ? resolveTextSizeToken(style.name) : void 0;
+    if (size === void 0) {
+      return {
+        properties: {},
+        errors: [
+          {
+            nodeId: node.id,
+            message: "".concat(truncateName(node.name), " \u2013 TYPOGRAPHY: not a token (").concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.textStyleId, ")")
+          }
+        ],
+        warnings: []
+      };
+    }
+    return { properties: { ["typography-".concat(size)]: true }, errors: [], warnings: [] };
   };
 
   // src/serialize/text.ts
@@ -1834,20 +1498,38 @@
       properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), alignment.properties), cornerRadius.properties), dimensions.properties), fill.properties), gap.properties), layout.properties), padding.properties), stroke.properties), {
         children: "children" in node ? node.children : []
       }),
-      // Components, instances and other frame-like layers need auto layout too (reported by readLayout).
-      errors: "layoutMode" in node ? layout.errors : [],
+      // Components, instances and other frame-like layers need auto layout too (reported by readLayout); other layers
+      // have none to report. The rest is in the order of Figma's right panel, like the rendered flags.
+      errors: [
+        ..."layoutMode" in node ? layout.errors : [],
+        ...dimensions.errors,
+        ...alignment.errors,
+        ...gap.errors,
+        ...padding.errors,
+        ...cornerRadius.errors,
+        ...fill.errors,
+        ...stroke.errors
+      ],
       warnings: [
         {
           nodeId: node.id,
-          message: 'Notice @ "'.concat(node.name, '" \u2013 unknown layer type.')
-        }
+          message: "".concat(truncateName(node.name), " \u2013 LAYER: unsupported (").concat(node.type, ")")
+        },
+        ...layout.warnings,
+        ...dimensions.warnings,
+        ...alignment.warnings,
+        ...gap.warnings,
+        ...padding.warnings,
+        ...cornerRadius.warnings,
+        ...fill.warnings,
+        ...stroke.warnings
       ]
     };
   };
 
   // src/serialize/vector.ts
-  var _round = (n) => String(Math.round(n * 100) / 100);
-  var _roundPath = (data) => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (n) => _round(Number(n)));
+  var round = (n) => String(Math.round(n * 100) / 100);
+  var roundPath = (data) => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (n) => round(Number(n)));
   var serializeVector = async (node, box = node) => {
     const fill = await readFill(node);
     const errors = [...fill.errors];
@@ -1855,40 +1537,40 @@
     if (geometry.length === 0) {
       errors.push({
         nodeId: node.id,
-        message: "Error @ ".concat(node.name, " \u2013 VECTOR has no path data.")
+        message: "".concat(truncateName(node.name), " \u2013 VECTOR PATH: missing")
       });
     }
     const bound = "boundVariables" in box ? box.boundVariables : void 0;
-    const width = (bound == null ? void 0 : bound.width) ? await resolveBoundUnitClass("width-", bound.width, box.width) : void 0;
-    const height = (bound == null ? void 0 : bound.height) ? await resolveBoundUnitClass("height-", bound.height, box.height) : void 0;
+    const width = (bound == null ? void 0 : bound.width) ? await resolveBoundUnitClass("width-", bound.width) : void 0;
+    const height = (bound == null ? void 0 : bound.height) ? await resolveBoundUnitClass("height-", bound.height) : void 0;
     if (!(bound == null ? void 0 : bound.width)) {
       errors.push({
         nodeId: box.id,
-        message: "Error @ ".concat(box.name, " \u2013 WIDTH value is not bound to a variable.")
+        message: "".concat(truncateName(box.name), " \u2013 WIDTH: not bound")
       });
     } else if (width === void 0) {
       errors.push({
         nodeId: box.id,
-        message: "Error @ ".concat(box.name, " \u2013 WIDTH variable does not match a unit token.")
+        message: "".concat(truncateName(box.name), " \u2013 WIDTH: not a token")
       });
     }
     if (!(bound == null ? void 0 : bound.height)) {
       errors.push({
         nodeId: box.id,
-        message: "Error @ ".concat(box.name, " \u2013 HEIGHT value is not bound to a variable.")
+        message: "".concat(truncateName(box.name), " \u2013 HEIGHT: not bound")
       });
     } else if (height === void 0) {
       errors.push({
         nodeId: box.id,
-        message: "Error @ ".concat(box.name, " \u2013 HEIGHT variable does not match a unit token.")
+        message: "".concat(truncateName(box.name), " \u2013 HEIGHT: not a token")
       });
     }
     const minX = box === node ? 0 : box.x - node.x;
     const minY = box === node ? 0 : box.y - node.y;
     return {
       properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), fill.properties), width ? { [width]: true } : {}), height ? { [height]: true } : {}), {
-        path: geometry.map((g) => _roundPath(g.data)).join(" "),
-        viewBox: [minX, minY, box.width, box.height].map(_round).join(" "),
+        path: geometry.map((g) => roundPath(g.data)).join(" "),
+        viewBox: [minX, minY, box.width, box.height].map(round).join(" "),
         fillRule: geometry.some((g) => g.windingRule === "EVENODD") ? "evenodd" : void 0
       }),
       errors,
@@ -1898,42 +1580,13 @@
 
   // src/serialize/node.ts
   var shouldExcludeFromOutput = async (node, annotationCategories, getMainComponentCached) => {
-    if (!node.visible) {
-      return true;
-    }
-    if (hasExcludeFromOutputAnnotation(node.annotations, annotationCategories)) {
-      return true;
-    }
-    if (node.type === "INSTANCE") {
-      const main = await getMainComponentCached(node);
-      if (main !== null && hasExcludeFromOutputAnnotation(main.annotations, annotationCategories)) {
-        return true;
-      }
-    }
+    if (!node.visible) return true;
+    if (hasExcludeFromOutputAnnotation(node.annotations, annotationCategories)) return true;
     const definitionLayer = await getMainDefinitionLayerForNode(node, getMainComponentCached);
-    if (definitionLayer !== null && "annotations" in definitionLayer && hasExcludeFromOutputAnnotation(definitionLayer.annotations, annotationCategories)) {
-      return true;
-    }
-    return false;
-  };
-  var collectNodesById = (root) => {
-    const map2 = /* @__PURE__ */ new Map();
-    const visit = (n) => {
-      map2.set(n.id, n);
-      if ("children" in n) {
-        for (const c of n.children) {
-          visit(c);
-        }
-      }
-    };
-    visit(root);
-    return map2;
+    return definitionLayer !== null && "annotations" in definitionLayer && hasExcludeFromOutputAnnotation(definitionLayer.annotations, annotationCategories);
   };
   var isInFrame = (node) => node.parent !== null && node.parent.type !== "PAGE" && node.parent.type !== "SECTION" && node.parent.type !== "DOCUMENT";
-  var asNotice = (error) => __spreadProps(__spreadValues({}, error), {
-    message: error.message.replace(/^Error @/, "Notice @")
-  });
-  var _node = async (node) => {
+  var serializeLayer = async (node) => {
     var _a3, _b, _c, _d;
     switch (node.type) {
       case "FRAME":
@@ -1954,7 +1607,7 @@
       case "ELLIPSE":
         return serializeEllipse(node);
       case "TEXT":
-        return await serializeText(node);
+        return serializeText(node);
       default:
         return serializeUnknown(
           node
@@ -1962,19 +1615,16 @@
     }
   };
   var serializeNode = async (root) => {
-    const nodesById = collectNodesById(root);
     const annotationCategories = await figma.annotations.getAnnotationCategoriesAsync();
     const mainComponentByInstanceId = /* @__PURE__ */ new Map();
     const getMainComponentCached = (instance) => {
       const existing = mainComponentByInstanceId.get(instance.id);
-      if (existing) {
-        return existing;
-      }
-      const p = instance.getMainComponentAsync();
-      mainComponentByInstanceId.set(instance.id, p);
-      return p;
+      if (existing) return existing;
+      const main = instance.getMainComponentAsync();
+      mainComponentByInstanceId.set(instance.id, main);
+      return main;
     };
-    const serializeWithMap = async (node) => {
+    const serializeTree = async (node) => {
       if (await shouldExcludeFromOutput(node, annotationCategories, getMainComponentCached)) {
         return {
           properties: {
@@ -1984,36 +1634,26 @@
           warnings: []
         };
       }
-      const r2 = await _node(node);
-      if (!isInFrame(node) && r2.errors.length > 0) {
-        r2.warnings = [...r2.errors.filter((error) => !error.always).map(asNotice), ...r2.warnings];
-        r2.errors = r2.errors.filter((error) => error.always);
+      const r = await serializeLayer(node);
+      if (!isInFrame(node) && r.errors.length > 0) {
+        r.warnings = [...r.errors.filter((error) => !error.always), ...r.warnings];
+        r.errors = r.errors.filter((error) => error.always);
       }
       const children = "children" in node ? node.children : [];
-      if (r2.properties.type !== "VECTOR" && children.length > 0 && !("OVERRIDE_TEXT_CONTENT" in r2.properties)) {
-        r2.properties.children = await Promise.all(
-          children.map((child) => {
-            const id = child.id;
-            const fullNode = id !== null ? nodesById.get(id) : null;
-            const target = fullNode != null ? fullNode : child;
-            return serializeWithMap(target);
-          })
+      if (r.properties.type !== "VECTOR" && children.length > 0) {
+        r.properties.children = await Promise.all(
+          children.map((child) => serializeTree(child))
         );
       }
-      return {
-        properties: r2.properties,
-        errors: r2.errors,
-        warnings: r2.warnings
-      };
+      return r;
     };
-    const r = await serializeWithMap(root);
-    return r;
+    return serializeTree(root);
   };
 
   // src/index.ts
-  figma.root.setRelaunchData({ run: "Export a selected frame as React component code" });
-  figma.currentPage.setRelaunchData({ run: "Export a selected frame as React component code" });
-  figma.showUI(__html__, { width: 480, height: 640, title: "Frame Plugin", themeColors: true });
+  figma.root.setRelaunchData({ run: "Generate Unison component code from a selected frame" });
+  figma.currentPage.setRelaunchData({ run: "Generate Unison component code from a selected frame" });
+  figma.showUI(__html__, { width: 480, height: 640, title: "Unison", themeColors: true });
   var showOutput = true;
   var hint = (text, duration = 1500) => figma.ui.postMessage({ hint: { text, duration } });
   var selectionHistory = [];
@@ -2057,7 +1697,7 @@
         messages.push(await createShadowStyles());
         messages.push(await createTextStyles());
         figma.notify(messages.join(" "), { timeout: 6e3 });
-        hint("Imported", 3e3);
+        hint("Imported design tokens", 3e3);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         figma.notify("".concat(messages.join(" "), " Import failed: ").concat(reason).trim(), { error: true, timeout: 1e4 });
@@ -2068,7 +1708,7 @@
     }
     if (msg.type === "refresh") {
       await runner();
-      hint("Refreshed");
+      hint("Regenerated component code");
       return;
     }
     if (msg.type === "back") {
@@ -2078,7 +1718,7 @@
         restoringSelection = true;
         if (await focusNode(previousId)) {
           currentSelectionId = previousId;
-          hint("Back to previous layer");
+          hint("Selected previous layer");
           return;
         }
         restoringSelection = false;
@@ -2088,7 +1728,7 @@
       return;
     }
     const id = msg.selectNode;
-    if (!id || id === "") return;
+    if (!id) return;
     const alreadySelected = ((_b = figma.currentPage.selection[0]) == null ? void 0 : _b.id) === id;
     await focusNode(id);
     if (alreadySelected) {
@@ -2101,7 +1741,7 @@
     figma.ui.postMessage({ loading: true });
     const node = figma.currentPage.selection[0];
     if (!node) {
-      figma.ui.postMessage({ output: placeholder, warnings: [], errors: [] });
+      figma.ui.postMessage({ empty: true });
       return;
     }
     try {
@@ -2109,17 +1749,11 @@
       const errors = [];
       const json = await serializeNode(node);
       const collectMessages = (p) => {
-        if (p.warnings.length > 0) {
-          warnings.push(...p.warnings);
-        }
-        if (p.errors.length > 0) {
-          errors.push(...p.errors);
-        }
-        const children = "children" in p.properties ? p.properties.children : [];
-        if (children) {
-          for (const child of children) {
-            collectMessages(child);
-          }
+        var _a3;
+        warnings.push(...p.warnings);
+        errors.push(...p.errors);
+        for (const child of (_a3 = p.properties.children) != null ? _a3 : []) {
+          collectMessages(child);
         }
       };
       collectMessages(json);
@@ -2132,7 +1766,7 @@
       figma.ui.postMessage({
         output: "",
         warnings: [],
-        errors: [{ nodeId: node.id, message: "Error @ ".concat(node.name, " \u2013 ").concat(reason) }]
+        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(reason) }]
       });
     }
   };

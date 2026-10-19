@@ -1,17 +1,13 @@
 import type { HEX, PropertiesErrorOrWarning } from "./types"
 
-const _toHex = (n: number): string => {
+const toHex = (n: number): string => {
   const clamped = Math.max(0, Math.min(255, Math.round(n)))
   const hex = clamped.toString(16).toUpperCase()
 
   return hex.length === 1 ? `0${hex}` : hex
 }
 
-export const RGBToHEX = (rgb: RGB): HEX => {
-  const scale = rgb.r <= 1 && rgb.g <= 1 && rgb.b <= 1 ? 255 : 1
-
-  return `#${_toHex(rgb.r * scale)}${_toHex(rgb.g * scale)}${_toHex(rgb.b * scale)}`
-}
+export const RGBToHEX = (rgb: RGB): HEX => `#${toHex(rgb.r * 255)}${toHex(rgb.g * 255)}${toHex(rgb.b * 255)}`
 
 const INDENT = ` `.repeat(4)
 
@@ -59,7 +55,7 @@ const PANEL_ORDER = [
   "effect-",
 ]
 
-const _panelRank = (flag: string): number => {
+const getPanelRank = (flag: string): number => {
   let rank = PANEL_ORDER.length
   let length = 0
 
@@ -73,53 +69,38 @@ const _panelRank = (flag: string): number => {
   return rank
 }
 
-const _byPanelOrder = (a: string, b: string): number => _panelRank(a) - _panelRank(b) || a.localeCompare(b)
+const compareByPanelOrder = (a: string, b: string): number => getPanelRank(a) - getPanelRank(b) || a.localeCompare(b)
 
 const SKIP_WRAPPER_TYPES = new Set(["INSTANCE", "COMPONENT", "SLOT"])
 
-const _booleanPropKeys = (properties: Record<string, unknown>): string[] =>
-  Object.keys(properties).filter((k) => !META_KEYS.has(k) && !k.startsWith("OVERRIDE_") && properties[k] === true)
+/** The boolean flags of a node, rendered one per line in its opening tag. */
+const getFlagKeys = (properties: Record<string, unknown>): string[] =>
+  Object.keys(properties).filter((k) => !META_KEYS.has(k) && properties[k] === true)
 
-/** Opening-tag lines: boolean flags, plus `type-frame` / `type-instance` / etc. from Figma `properties.type`. */
-const _openTagPropKeys = (tag: string, properties: Record<string, unknown>): string[] => {
-  const keys = _booleanPropKeys(properties)
-  if (tag !== "Frame") {
-    return keys
-  }
-  const t = properties.type
-  if (typeof t !== "string" || t.length === 0) {
-    return keys
-  }
-  const typeKey = `type-${t.toLowerCase().replace(/_/g, "-")}`
-  const rest = keys.filter((k) => k !== typeKey)
-  return [...rest]
-}
-
-const _formatOpenTag = (
+const formatOpenTag = (
   tag: string,
   properties: Record<string, unknown>,
   indentation: string,
   selfClosing: boolean,
 ): string => {
-  const flags = _openTagPropKeys(tag, properties).sort(_byPanelOrder)
+  const flags = getFlagKeys(properties).sort(compareByPanelOrder)
   const attributes = (STRING_PROP_KEYS[tag] ?? [])
     .filter((k) => typeof properties[k] === "string")
     .map((k) => `${k}="${properties[k]}"`)
   const keys = [...flags, ...attributes]
 
-  if (keys.length === 0) {
-    return selfClosing ? `${indentation}<${tag} />` : `${indentation}<${tag}>`
-  }
+  if (keys.length === 0) return selfClosing ? `${indentation}<${tag} />` : `${indentation}<${tag}>`
 
-  const lines: string[] = [`${indentation}<${tag}`]
-  for (const k of keys) {
-    lines.push(`${indentation}  ${k}`)
-  }
-  lines.push(selfClosing ? `${indentation}/>` : `${indentation}>`)
+  const lines = [
+    `${indentation}<${tag}`,
+    ...keys.map((k) => `${indentation}  ${k}`),
+    selfClosing ? `${indentation}/>` : `${indentation}>`,
+  ]
+
   return lines.join("\n")
 }
 
-const _resolveTag = (properties: Record<string, unknown>): string => {
+const resolveTag = (properties: Record<string, unknown>): string => {
   if (properties.type === "TEXT") return "Text"
   if (properties.type === "VECTOR") return "Vector"
   if (properties.type === "ELLIPSE") return "Ellipse"
@@ -128,65 +109,47 @@ const _resolveTag = (properties: Record<string, unknown>): string => {
   return "Frame"
 }
 
-const _renderComponentNode = (node: PropertiesErrorOrWarning, indentation: string): string => {
+const renderChildren = (children: PropertiesErrorOrWarning[], indentation: string): string =>
+  children
+    .map((child) => renderNode(child, indentation))
+    .filter((part) => part.length > 0)
+    .join("\n")
+
+const renderNode = (node: PropertiesErrorOrWarning, indentation: string): string => {
   const { properties } = node
 
-  if ("EXCLUDE_FROM_OUTPUT" in properties && properties.EXCLUDE_FROM_OUTPUT === true) {
-    return ""
-  }
+  if (properties.EXCLUDE_FROM_OUTPUT === true) return ""
 
-  const tag = _resolveTag(properties)
-  const children = Array.isArray(properties.children) ? (properties.children as PropertiesErrorOrWarning[]) : []
+  const tag = resolveTag(properties)
+  const children = (properties.children as PropertiesErrorOrWarning[] | undefined) ?? []
+  const type = properties.type
 
-  const t = properties.type
-  if (typeof t === "string" && SKIP_WRAPPER_TYPES.has(t)) {
-    if (children.length === 0) {
-      return ""
-    }
-    const [first, ...rest] = children
-    // const mergedFirst = _mergeSkippedWrapperIntoFirstChild(node, first)
-    const parts: string[] = [_renderComponentNode(first, indentation)]
-    for (const child of rest) {
-      parts.push(_renderComponentNode(child, indentation))
-    }
-    return parts.filter((p) => p.length > 0).join("\n")
-  }
-
-  const keys = _openTagPropKeys(tag, properties)
-
-  if (tag === "Frame" && keys.length === 0) {
-    if (children.length === 0) {
-      return ""
-    }
-    const parts: string[] = []
-    for (const child of children) {
-      parts.push(_renderComponentNode(child, indentation))
-    }
-    return parts.filter((p) => p.length > 0).join("\n")
-  }
+  if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation)
+  if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation)
 
   const selfClosing = tag === "Ellipse" || tag === "Rectangle" || tag === "Vector"
+  const open = formatOpenTag(tag, properties, indentation, selfClosing)
 
-  const open = _formatOpenTag(tag, properties, indentation, selfClosing)
-
-  if (selfClosing) {
-    return open
-  }
-
-  if (tag === "Text") {
+  if (selfClosing) return open
+  if (tag === "Text")
     return [open, `${indentation}${INDENT}${properties.characters}`, `${indentation}</Text>`].join("\n")
-  }
 
-  const parts: string[] = [open]
+  const parts = [
+    open,
+    ...children.map((child) => renderNode(child, `${indentation}${INDENT}`)),
+    `${indentation}</${tag}>`,
+  ]
 
-  for (const child of children) {
-    parts.push(_renderComponentNode(child, `${indentation}${INDENT}`))
-  }
-
-  parts.push(`${indentation}</${tag}>`)
   return parts.join("\n")
 }
 
-export const renderComponentCode = (json: PropertiesErrorOrWarning): string => _renderComponentNode(json, "")
+export const renderComponentCode = (json: PropertiesErrorOrWarning): string => renderNode(json, "")
 
-export const isHEX = (value: string): boolean => value.startsWith("#")
+const MAX_NAME_LENGTH = 15
+
+/**
+ * A layer name short enough for one Issues line: text layers are often named after their whole content.
+ * @example truncateName("A very long paragraph of body copy") // "A very long par…"
+ */
+export const truncateName = (name: string): string =>
+  name.length > MAX_NAME_LENGTH ? `${name.slice(0, MAX_NAME_LENGTH)}…` : name

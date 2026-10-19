@@ -1,5 +1,3 @@
-import { adoptStyle } from "./legacyNames"
-
 // Figma's variable import can't create styles, so this creates an effect style per shadow from the imported
 // `shadow-<name>-<layer>-<field>` variables (unison-components/dist/design-tokens.json), each layer bound
 // to its variables. Running it again updates the styles in place. readEffect reads the shadow back from the style's
@@ -89,14 +87,10 @@ export const createShadowStyles = async (): Promise<string> => {
   let previous: EffectStyle | null = null
 
   for (const [name, layers] of shadows) {
-    const { style, existed } = await adoptStyle(
-      styles,
-      `shadow-${name}`,
-      () => figma.createEffectStyle(),
-      async (node, adopted) => {
-        if ("setEffectStyleIdAsync" in node) await node.setEffectStyleIdAsync(adopted.id)
-      },
-    )
+    const existing = styles.find((style) => style.name === `shadow-${name}`)
+    const style = existing ?? figma.createEffectStyle()
+
+    style.name = `shadow-${name}`
 
     style.effects = [...layers.entries()].sort(([a], [b]) => a - b).map(([, layer]) => buildEffect(layer))
 
@@ -104,7 +98,7 @@ export const createShadowStyles = async (): Promise<string> => {
 
     previous = style
 
-    if (existed) {
+    if (existing) {
       updated++
     } else {
       created++

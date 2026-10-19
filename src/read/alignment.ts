@@ -1,7 +1,8 @@
 import type { FigmaFrameAlignment, FigmaTypographyAlignment } from "../../unison-components/types/figma"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import { truncateName } from "../utilities"
 
-const mapFrame: Record<string, keyof FigmaFrameAlignment> = {
+const FRAME_ALIGNMENT: Record<string, keyof FigmaFrameAlignment> = {
   HORIZONTAL_MIN_MIN: "alignment-top-left",
   HORIZONTAL_MIN_CENTER: "alignment-left",
   HORIZONTAL_MIN_MAX: "alignment-bottom-left",
@@ -42,34 +43,30 @@ export const readAlignmentFrame = (node: SceneNode & AutoLayoutMixin): Propertie
 
   // Without horizontal or vertical auto layout there's no alignment to read; readLayout reports that.
   if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
-    properties[mapFrame[`${node.layoutMode}_${node.primaryAxisAlignItems}_${node.counterAxisAlignItems}`]] = true
+    properties[FRAME_ALIGNMENT[`${node.layoutMode}_${node.primaryAxisAlignItems}_${node.counterAxisAlignItems}`]] = true
   }
 
   return { properties, errors, warnings: [] }
 }
 
-const mapText: Record<string, keyof FigmaTypographyAlignment> = {
+const TEXT_ALIGNMENT: Record<string, keyof FigmaTypographyAlignment> = {
   LEFT: "typography-align-left",
   CENTER: "typography-align-center",
   RIGHT: "typography-align-right",
 }
 
 export const readAlignmentText = (node: TextNode): PropertiesErrorOrWarning => {
-  const properties: Properties = {}
-  const errors: ErrorOrWarning[] = []
+  const alignment = node.textAlignHorizontal
 
-  if (
-    node.textAlignHorizontal === "LEFT" ||
-    node.textAlignHorizontal === "CENTER" ||
-    node.textAlignHorizontal === "RIGHT"
-  ) {
-    properties[mapText[node.textAlignHorizontal]] = true
-  } else {
-    errors.push({
-      nodeId: node.id,
-      message: `Error @ ${node.name} – TEXT alignment must be "left", "center" or "right".`,
-    })
+  if (alignment === "LEFT" || alignment === "CENTER" || alignment === "RIGHT") {
+    return { properties: { [TEXT_ALIGNMENT[alignment]]: true }, errors: [], warnings: [] }
   }
 
-  return { properties, errors, warnings: [] }
+  return {
+    properties: {},
+    errors: [
+      { nodeId: node.id, message: `${truncateName(node.name)} – TEXT ALIGNMENT: must be left, center or right` },
+    ],
+    warnings: [],
+  }
 }

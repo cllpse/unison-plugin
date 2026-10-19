@@ -1,5 +1,3 @@
-import { canonicalName } from "./legacyNames"
-
 // Figma's own import takes one collection at a time and doesn't apply the files' scopes, so this imports every
 // collection in a picked tokens file (unison-components/dist/design-tokens.json) in one go, with each variable's
 // scopes. Its top-level keys are the collections, then the modes, each in the format of Figma's own export. Running it
@@ -115,7 +113,7 @@ export const importVariables = async (text: unknown): Promise<string> => {
   }
 
   if (!(file instanceof Map)) {
-    throw new Error("not a tokens file.")
+    throw new Error("not a design tokens file.")
   }
 
   const collectionsInFile = [...file].map(([name, modes]) => ({
@@ -124,7 +122,7 @@ export const importVariables = async (text: unknown): Promise<string> => {
   }))
 
   if (collectionsInFile.length === 0 || collectionsInFile.some(({ modes }) => modes.length === 0)) {
-    throw new Error("not a tokens file.")
+    throw new Error("not a design tokens file.")
   }
 
   const collections = await figma.variables.getLocalVariableCollectionsAsync()
@@ -133,14 +131,8 @@ export const importVariables = async (text: unknown): Promise<string> => {
   let updated = 0
 
   for (const { name, modes } of collectionsInFile) {
-    // A collection or variable an earlier import made under an older name (`unison-colors`, `unison-red-500`) is
-    // renamed and updated, so its bindings keep working.
     const collection =
-      collections.find((existing) => existing.name === name) ??
-      collections.find((existing) => canonicalName(existing.name) === canonicalName(name)) ??
-      figma.variables.createVariableCollection(name)
-
-    collection.name = name
+      collections.find((existing) => existing.name === name) ?? figma.variables.createVariableCollection(name)
 
     // The first mode reuses the collection's default mode; the rest are found by name or added.
     const modeIds = modes.map((mode, i) => {
@@ -167,12 +159,7 @@ export const importVariables = async (text: unknown): Promise<string> => {
 
       if (!type) continue
 
-      let variable =
-        byName.get(variableName) ??
-        inCollection.find(
-          (existing) =>
-            !tokensByMode[0].has(existing.name) && canonicalName(existing.name) === canonicalName(variableName),
-        )
+      let variable = byName.get(variableName)
 
       if (variable && variable.resolvedType !== type) {
         variable.remove()
@@ -180,7 +167,6 @@ export const importVariables = async (text: unknown): Promise<string> => {
       }
 
       if (variable) {
-        variable.name = variableName
         updated++
       } else {
         variable = figma.variables.createVariable(variableName, collection, type)

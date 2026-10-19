@@ -1,20 +1,20 @@
 import { createShadowStyles } from "./createShadowStyles"
 import { createTextStyles } from "./createTextStyles"
 import { importVariables } from "./importVariables"
-import { placeholder } from "./placeholder"
 import { serializeNode } from "./serialize/node"
 import type { ErrorOrWarning, PropertiesErrorOrWarning } from "./types"
-import { renderComponentCode } from "./utilities"
+import { renderComponentCode, truncateName } from "./utilities"
 
-figma.root.setRelaunchData({ run: "Export a selected frame as React component code" })
-figma.currentPage.setRelaunchData({ run: "Export a selected frame as React component code" })
+figma.root.setRelaunchData({ run: "Generate Unison component code from a selected frame" })
+figma.currentPage.setRelaunchData({ run: "Generate Unison component code from a selected frame" })
 
-figma.showUI(__html__, { width: 480, height: 640, title: "Frame Plugin", themeColors: true })
+figma.showUI(__html__, { width: 480, height: 640, title: "Unison", themeColors: true })
 
 let showOutput = true
 
 /** Show a short confirmation in the plugin's header, next to the toolbar. */
 const hint = (text: string, duration = 1500) => figma.ui.postMessage({ hint: { text, duration } })
+
 const selectionHistory: string[] = []
 let currentSelectionId: string | null = null
 let restoringSelection = false
@@ -72,7 +72,7 @@ figma.ui.onmessage = async (msg: { selectNode?: string; type?: string; showOutpu
       messages.push(await createTextStyles())
 
       figma.notify(messages.join(" "), { timeout: 6000 })
-      hint("Imported", 3000)
+      hint("Imported design tokens", 3000)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
 
@@ -87,7 +87,7 @@ figma.ui.onmessage = async (msg: { selectNode?: string; type?: string; showOutpu
 
   if (msg.type === "refresh") {
     await runner()
-    hint("Refreshed")
+    hint("Regenerated component code")
 
     return
   }
@@ -102,7 +102,7 @@ figma.ui.onmessage = async (msg: { selectNode?: string; type?: string; showOutpu
 
       if (await focusNode(previousId)) {
         currentSelectionId = previousId
-        hint("Back to previous layer")
+        hint("Selected previous layer")
 
         return
       }
@@ -119,7 +119,7 @@ figma.ui.onmessage = async (msg: { selectNode?: string; type?: string; showOutpu
 
   const id = msg.selectNode
 
-  if (!id || id === "") return
+  if (!id) return
 
   // Selecting the layer that's already selected fires no selectionchange, so run directly.
   const alreadySelected = figma.currentPage.selection[0]?.id === id
@@ -141,8 +141,9 @@ const runner = async () => {
 
   const node = figma.currentPage.selection[0]
 
+  // Nothing selected: the UI shows its empty state.
   if (!node) {
-    figma.ui.postMessage({ output: placeholder, warnings: [], errors: [] })
+    figma.ui.postMessage({ empty: true })
 
     return
   }
@@ -154,20 +155,11 @@ const runner = async () => {
     const json = await serializeNode(node)
 
     const collectMessages = (p: PropertiesErrorOrWarning) => {
-      if (p.warnings.length > 0) {
-        warnings.push(...p.warnings)
-      }
+      warnings.push(...p.warnings)
+      errors.push(...p.errors)
 
-      if (p.errors.length > 0) {
-        errors.push(...p.errors)
-      }
-
-      const children = "children" in p.properties ? (p.properties.children as PropertiesErrorOrWarning[]) : []
-
-      if (children) {
-        for (const child of children) {
-          collectMessages(child)
-        }
+      for (const child of (p.properties.children as PropertiesErrorOrWarning[] | undefined) ?? []) {
+        collectMessages(child)
       }
     }
 
@@ -187,7 +179,7 @@ const runner = async () => {
     figma.ui.postMessage({
       output: "",
       warnings: [],
-      errors: [{ nodeId: node.id, message: `Error @ ${node.name} – ${reason}` }],
+      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – ${reason}` }],
     })
   }
 }
