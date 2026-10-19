@@ -88,8 +88,16 @@
         cursor: pointer;
       }
 
-      textarea {
+      /* The output pane: the code, with the toolbar floating over its top-right corner. */
+      .output {
+        position: relative;
+        display: flex;
         flex: 1 1 50%;
+        min-height: 0;
+      }
+
+      textarea {
+        flex: 1 1 auto;
         min-height: 0;
         width: 100%;
         border: none;
@@ -113,8 +121,7 @@
         margin: 0;
         padding: 0;
         position: absolute;
-        /* 8px inside the output pane's top-right corner (the header is 46px tall). */
-        top: 54px;
+        top: 8px;
         right: 8px;
       }
 
@@ -146,10 +153,32 @@
         }
       }
 
-      /* Groups: back, then refresh and copy, then import. */
-      #refresh,
-      #import {
+      /* Groups: back, then refresh and copy. */
+      #refresh {
         margin-left: 4px;
+      }
+
+      /* Import sits before "Show output", 8px apart. */
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        /* The 24px icon overhangs the 18px text line instead of growing the header. On hover only the icon lightens; it
+           gets no background. */
+        #import {
+          margin-block: -3px;
+          color: var(--figma-color-icon);
+
+          &:hover {
+            background-color: transparent;
+            color: var(--figma-color-icon-secondary);
+          }
+        }
+
+        fieldset {
+          margin: 0;
+        }
       }
 
       /* The import icon is a label for the file input, so a click opens the file picker natively. The input stays in
@@ -175,8 +204,7 @@
 
       /* With the output pane hidden the issues list is the only flexible child,
          so it takes the whole frame. */
-      body.output-hidden textarea,
-      body.output-hidden menu {
+      body.output-hidden .output {
         display: none;
       }
 
@@ -272,29 +300,33 @@
     <header>
       <p class="tertiary" id="copy-hint"></p>
 
-      <fieldset>
-        <input type="checkbox" id="checkbox" checked>
-        <label for="checkbox">Show output</label>
-      </fieldset>
+      <div class="header-actions">
+        <label id="import" class="icon-button" for="import-file" aria-label="Import tokens" title="Import tokens as variables and styles">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5.5 17.63 8.75v6.5L12 18.5l-5.63-3.25v-6.5z" /><path d="M12 9v5M9.75 12 12 14.25 14.25 12" /></svg>
+        </label>
+        <input id="import-file" type="file" accept=".json,application/json" tabindex="-1" />
+        <fieldset>
+          <input type="checkbox" id="checkbox" checked>
+          <label for="checkbox">Show output</label>
+        </fieldset>
+      </div>
     </header>
 
-    <textarea id="textarea" spellcheck="false"></textarea>
+    <div class="output">
+      <textarea id="textarea" spellcheck="false"></textarea>
 
-    <menu>
-      <button id="back" type="button" title="Go back to previous layer">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 12H7M11 8l-4 4 4 4" /></svg>
-      </button>
-      <button id="refresh" type="button" title="Re-generate output">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.95 10.5A5 5 0 1 0 17 13" /><path d="M17 6.5v4h-4" /></svg>
-      </button>
-      <button id="copy" type="button" title="Copy output to clipboard">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.5" y="9.5" width="8" height="8" rx="1.5" /><path d="M14.5 9.5V8A1.5 1.5 0 0 0 13 6.5H8A1.5 1.5 0 0 0 6.5 8v5A1.5 1.5 0 0 0 8 14.5h1.5" /></svg>
-      </button>
-      <label id="import" class="icon-button" for="import-file" aria-label="Import tokens" title="Import a tokens file as variables, shadow styles and text styles">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5.5v8M8.75 10.25 12 13.5l3.25-3.25" /><path d="M6.5 13v3a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-3" /></svg>
-      </label>
-      <input id="import-file" type="file" accept=".json,application/json" tabindex="-1" />
-    </menu>
+      <menu>
+        <button id="back" type="button" title="Go back to previous layer">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 12H7M11 8l-4 4 4 4" /></svg>
+        </button>
+        <button id="refresh" type="button" title="Re-generate output">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.95 10.5A5 5 0 1 0 17 13" /><path d="M17 6.5v4h-4" /></svg>
+        </button>
+        <button id="copy" type="button" title="Copy output to clipboard">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.5" y="9.5" width="8" height="8" rx="1.5" /><path d="M14.5 9.5V8A1.5 1.5 0 0 0 13 6.5H8A1.5 1.5 0 0 0 6.5 8v5A1.5 1.5 0 0 0 8 14.5h1.5" /></svg>
+        </button>
+      </menu>
+    </div>
 
     <summary>
       <p><strong>Issues</strong></p>
@@ -334,12 +366,13 @@
       revealScrollbarWhileScrolling(textarea)
       revealScrollbarWhileScrolling(summary)
 
-      const showCopied = () => {
-        copyHint.textContent = "Copied to clipboard"
+      // Every toolbar button confirms what it did here, briefly.
+      const showHint = (text, duration = 1500) => {
+        copyHint.textContent = text
         clearTimeout(copyHintTimeout)
         copyHintTimeout = setTimeout(() => {
           copyHint.textContent = ""
-        }, 1000)
+        }, duration)
       }
 
       const copyOutput = () => {
@@ -349,7 +382,7 @@
         textarea.select()
         document.execCommand("copy")
         textarea.setSelectionRange(selectionStart, selectionEnd)
-        showCopied()
+        showHint("Copied to clipboard")
       }
 
       copy.onclick = copyOutput
@@ -373,6 +406,7 @@
       textarea.value = window.placeholder
 
       refresh.onclick = () => {
+        showHint("Refreshing…")
         setLoading()
         window.parent.postMessage({ pluginMessage: { type: "refresh" } }, "*")
       }
@@ -387,11 +421,13 @@
 
         if (!file) return
 
+        showHint(`Importing ${file.name}…`, 60000)
         setLoading()
         window.parent.postMessage({ pluginMessage: { type: "import", tokens: await file.text() } }, "*")
       }
 
       back.onclick = () => {
+        showHint("Going back…")
         setLoading()
         window.parent.postMessage({ pluginMessage: { type: "back" } }, "*")
       }
@@ -406,7 +442,13 @@
       }
 
       window.onmessage = (event) => {
-        const { output, warnings, errors, loading } = event.data.pluginMessage
+        const { output, warnings, errors, loading, hint } = event.data.pluginMessage
+
+        if (hint) {
+          showHint(hint.text, hint.duration)
+
+          return
+        }
 
         if (loading) {
           textarea.value = "Loading…"

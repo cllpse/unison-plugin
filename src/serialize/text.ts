@@ -9,7 +9,8 @@ export const serializeText = async (node: TextNode): Promise<PropertiesErrorOrWa
   const alignment = readAlignmentText(node)
   const typography = await readTypography(node)
 
-  const errors = [...alignment.errors, ...fill.errors, ...typography.errors]
+  // In the order of Figma's right panel, like the rendered flags.
+  const errors = [...typography.errors, ...alignment.errors, ...fill.errors]
 
   const characters = node.characters
 
@@ -25,6 +26,6 @@ export const serializeText = async (node: TextNode): Promise<PropertiesErrorOrWa
     },
 
     errors,
-    warnings: [],
+    warnings: [...typography.warnings, ...alignment.warnings, ...fill.warnings],
   }
 }

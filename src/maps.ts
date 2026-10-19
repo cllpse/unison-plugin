@@ -1,5 +1,5 @@
 import { COLORS } from "../unison-components/src/constants/colors"
-import { RADII, SHADOWS, UNITS, UNITS_FIGMA } from "../unison-components/src/constants/units"
+import { CONTAINERS, RADII, SHADOWS, UNITS, UNITS_FIGMA } from "../unison-components/src/constants/units"
 import type {
   FigmaFill,
   FigmaFrameGap,
@@ -44,22 +44,12 @@ for (const [name, value] of Object.entries(COLORS)) {
     continue
   }
 
-  const paletteHexes = new Set<string>()
-
-  for (const [shade, hex] of Object.entries(value)) {
+  for (const [shade, hex] of Object.entries(value) as [string, string][]) {
     COLOR_TOKENS.add(`${name}-${shade}`)
 
-    if (shade === "0" || shade === "brand" || !isRgbHex(hex)) {
-      continue
+    if (isRgbHex(hex)) {
+      addHexOwner(hex, `${name}-${shade}`)
     }
-
-    addHexOwner(hex, `${name}-${shade}`)
-    paletteHexes.add(hex)
-  }
-
-  // Tailwind's hues have no brand shade.
-  if ("brand" in value && isRgbHex(value.brand) && !paletteHexes.has(value.brand)) {
-    addHexOwner(value.brand, `${name}-brand`)
   }
 }
 
@@ -72,13 +62,7 @@ for (const [hex, tokens] of HEX_OWNERS) {
 }
 
 const normalizeColorName = (name: string): string =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/_/g, "-")
-    .replace(/\//g, "-")
-    .replace(/neutral-surface/g, "neutralsurface")
+  name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/\//g, "-")
 
 export const resolveColorToken = (variableName: string | undefined, hex?: HEX): string | undefined => {
   if (variableName) {
@@ -130,17 +114,12 @@ export const mapStrokeColor = buildColorMap<keyof FigmaStroke>("stroke-")
 
 export const mapFillColor = buildColorMap<keyof FigmaFill>("fill-")
 
-/** `05` and `1px` are deprecated aliases of `0p5` (2px) and `px` (1px). Prefer the new tokens. */
-const DEPRECATED_UNITS = new Set(["05", "1px"])
-
-const UNIT_TOKENS = new Set(
-  [...Object.keys(UNITS), ...Object.keys(UNITS_FIGMA)].filter((unit) => !DEPRECATED_UNITS.has(unit)),
-)
+const UNIT_TOKENS = new Set([...Object.keys(UNITS), ...Object.keys(UNITS_FIGMA)])
 
 const PIXEL_TO_TOKEN: Record<number, string> = {}
 
 for (const [unit, pixels] of Object.entries({ ...UNITS, ...UNITS_FIGMA })) {
-  if (typeof pixels !== "number" || DEPRECATED_UNITS.has(unit)) {
+  if (typeof pixels !== "number") {
     continue
   }
 
@@ -288,6 +267,16 @@ export const resolveRadiusToken = (variableName: string | undefined, pixels?: nu
   }
 
   return pixels !== undefined ? PIXEL_TO_RADIUS[pixels] : undefined
+}
+
+/**
+ * Resolve a width variable named for Tailwind's container scale (`container-md`, `unison-container/md`) to its name.
+ * Only the name counts: container pixel values overlap the spacing scale (256px is also `64`).
+ */
+export const resolveContainerToken = (variableName: string | undefined): string | undefined => {
+  const [, key] = normalizeStyleName(variableName ?? "").match(/(?:^|-)container-(.+)$/) ?? []
+
+  return key !== undefined && key in CONTAINERS ? key : undefined
 }
 
 const SHADOW_TOKENS = new Set<string>(["none", "small", "large", ...SHADOWS])

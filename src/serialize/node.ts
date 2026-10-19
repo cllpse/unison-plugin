@@ -1,4 +1,4 @@
-import type { PropertiesErrorOrWarning } from "../types"
+import type { ErrorOrWarning, PropertiesErrorOrWarning } from "../types"
 import { getMainDefinitionLayerForNode, hasExcludeFromOutputAnnotation } from "./annotationExclude"
 import { serializeEllipse } from "./ellipse"
 import { serializeFrame } from "./frame"
@@ -58,6 +58,17 @@ const collectNodesById = (root: SceneNode): Map<string, SceneNode> => {
   return map
 }
 
+const isInFrame = (node: SceneNode): boolean =>
+  node.parent !== null &&
+  node.parent.type !== "PAGE" &&
+  node.parent.type !== "SECTION" &&
+  node.parent.type !== "DOCUMENT"
+
+const asNotice = (error: ErrorOrWarning): ErrorOrWarning => ({
+  ...error,
+  message: error.message.replace(/^Error @/, "Notice @"),
+})
+
 const _node = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
   switch (node.type) {
     case "FRAME":
@@ -115,6 +126,13 @@ export const serializeNode = async (root: SceneNode): Promise<PropertiesErrorOrW
     }
 
     const r = await _node(node)
+
+    // A top-level layer (its parent is the page or a section, not a frame) reports its own errors as notices, except
+    // the ones that always stay errors (missing auto layout).
+    if (!isInFrame(node) && r.errors.length > 0) {
+      r.warnings = [...r.errors.filter((error) => !error.always).map(asNotice), ...r.warnings]
+      r.errors = r.errors.filter((error) => error.always)
+    }
 
     const children = "children" in node ? node.children : []
 

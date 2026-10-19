@@ -16,6 +16,7 @@ export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOr
     errors.push({
       nodeId: node.id,
       message: `Error @ ${node.name} – FRAME has no auto layout.`,
+      always: true,
     })
   } else {
     properties[flag] = true

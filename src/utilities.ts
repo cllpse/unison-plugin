@@ -34,6 +34,8 @@ const PANEL_ORDER = [
   "height-",
   "alignment-",
   "gap-",
+  "gap-horizontal-",
+  "gap-vertical-",
   "padding-",
   "padding-horizontal-",
   "padding-vertical-",

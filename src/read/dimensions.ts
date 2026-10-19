@@ -1,6 +1,6 @@
 import { mapHeight, mapWidth } from "../maps"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
-import { resolveBoundUnitClass } from "./unit"
+import { resolveBoundUnitClass, resolveBoundWidthClass } from "./unit"
 
 export const readDimensions = async (node: SceneNode & LayoutMixin): Promise<PropertiesErrorOrWarning> => {
   const properties: Properties = {}
@@ -12,7 +12,7 @@ export const readDimensions = async (node: SceneNode & LayoutMixin): Promise<Pro
 
     if (node.layoutSizingHorizontal === "FIXED") {
       if (node.boundVariables?.width) {
-        const className = await resolveBoundUnitClass("width-", node.boundVariables.width, node.width)
+        const className = await resolveBoundWidthClass(node.boundVariables.width, node.width)
 
         if (className) {
           properties[className] = true

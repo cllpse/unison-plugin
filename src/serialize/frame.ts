@@ -21,28 +21,29 @@ export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<P
   const padding = await readPadding(node)
   const stroke = await readStroke(node)
 
+  // In the order of Figma's right panel, like the rendered flags.
   const errors: ErrorOrWarning[] = [
-    ...alignment.errors,
-    ...cornerRadius.errors,
-    ...dimensions.errors,
-    ...effect.errors,
-    ...fill.errors,
-    ...gap.errors,
     ...layout.errors,
+    ...dimensions.errors,
+    ...alignment.errors,
+    ...gap.errors,
     ...padding.errors,
+    ...cornerRadius.errors,
+    ...fill.errors,
     ...stroke.errors,
+    ...effect.errors,
   ]
 
   const warnings: ErrorOrWarning[] = [
-    ...alignment.warnings,
-    ...cornerRadius.warnings,
-    ...dimensions.warnings,
-    ...effect.warnings,
-    ...fill.warnings,
-    ...gap.warnings,
     ...layout.warnings,
+    ...dimensions.warnings,
+    ...alignment.warnings,
+    ...gap.warnings,
     ...padding.warnings,
+    ...cornerRadius.warnings,
+    ...fill.warnings,
     ...stroke.warnings,
+    ...effect.warnings,
   ]
   return {
     properties: {

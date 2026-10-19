@@ -12,6 +12,9 @@ figma.currentPage.setRelaunchData({ run: "Export a selected frame as React compo
 figma.showUI(__html__, { width: 480, height: 640, title: "Frame Plugin", themeColors: true })
 
 let showOutput = true
+
+/** Show a short confirmation in the plugin's header, next to the toolbar. */
+const hint = (text: string, duration = 1500) => figma.ui.postMessage({ hint: { text, duration } })
 const selectionHistory: string[] = []
 let currentSelectionId: string | null = null
 let restoringSelection = false
@@ -69,10 +72,12 @@ figma.ui.onmessage = async (msg: { selectNode?: string; type?: string; showOutpu
       messages.push(await createTextStyles())
 
       figma.notify(messages.join(" "), { timeout: 6000 })
+      hint("Imported", 3000)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
 
       figma.notify(`${messages.join(" ")} Import failed: ${reason}`.trim(), { error: true, timeout: 10000 })
+      hint("Import failed", 3000)
     }
 
     runner()
@@ -81,7 +86,8 @@ figma.ui.onmessage = async (msg: { selectNode?: string; type?: string; showOutpu
   }
 
   if (msg.type === "refresh") {
-    runner()
+    await runner()
+    hint("Refreshed")
 
     return
   }
@@ -96,12 +102,17 @@ figma.ui.onmessage = async (msg: { selectNode?: string; type?: string; showOutpu
 
       if (await focusNode(previousId)) {
         currentSelectionId = previousId
+        hint("Back to previous layer")
 
         return
       }
 
       restoringSelection = false
     }
+
+    // Nothing to go back to: re-render so the output leaves its loading state.
+    runner()
+    hint("No previous layer")
 
     return
   }
