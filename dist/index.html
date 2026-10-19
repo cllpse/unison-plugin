@@ -105,65 +105,61 @@
         white-space: nowrap;
       }
 
+      /* Figma-style icon buttons (24px, 5px corners), floating over the output's top-right corner. */
       menu {
         display: flex;
         flex-direction: row;
-        flex-shrink: 0;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+        position: absolute;
+        /* 8px inside the output pane's top-right corner (the header is 46px tall). */
+        top: 54px;
+        right: 8px;
+      }
+
+      button,
+      label.icon-button {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
         padding: 0;
         border: none;
-        position: absolute;
-        top: 34px;
-        right: 0px;
-        padding-top: 5px;
-        padding-right: 4px;
-      }
-
-      button {
-        appearance: none;
-        position: relative;
-        border: none;
+        border-radius: 5px;
         outline: none;
+        appearance: none;
         background-color: transparent;
-        width: 40px;
-        height: 40px;
-        border-radius: 100%;
+        color: var(--figma-color-icon-secondary);
         cursor: pointer;
 
-        &:after {
-          position: absolute;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          top: 0;
-          left: 0;
-          width: 43px;
-          height: 36px;
-          font-family: var(--font-family);
-          pointer-events: none;
-          color: var(--figma-color-text-tertiary);
-        }
-
         &:hover {
-          background-color: var(--figma-color-border);
+          background-color: var(--figma-color-bg-hover);
+          color: var(--figma-color-icon);
+        }
 
-          &:after {
-            color: var(--figma-color-text);
-          }
+        svg {
+          display: block;
+          pointer-events: none;
         }
       }
 
-      button#refresh:after {
-        content: "⟳";
-        width: 43px;
-        height: 36px;
-        transform: scale(2);
+      /* Groups: back, then refresh and copy, then import. */
+      #refresh,
+      #import {
+        margin-left: 4px;
       }
 
-      button#back:after {
-        content: "←";
-        width: 40px;
-        height: 38px;
-        transform: scale(1.333);
+      /* The import icon is a label for the file input, so a click opens the file picker natively. The input stays in
+         the layout (not display: none) so every browser lets the label open it. */
+      #import-file {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
       }
 
       summary {
@@ -179,7 +175,8 @@
 
       /* With the output pane hidden the issues list is the only flexible child,
          so it takes the whole frame. */
-      body.output-hidden textarea {
+      body.output-hidden textarea,
+      body.output-hidden menu {
         display: none;
       }
 
@@ -273,7 +270,7 @@
 
   <body>
     <header>
-      <p class="tertiary" id="copy-hint">Click output to copy to clipboard</p>
+      <p class="tertiary" id="copy-hint"></p>
 
       <fieldset>
         <input type="checkbox" id="checkbox" checked>
@@ -284,8 +281,19 @@
     <textarea id="textarea" spellcheck="false"></textarea>
 
     <menu>
-      <button id="back" type="button" title="Go back to previous node"></button>
-      <button id="refresh" type="button" title="Re-generate output"></button>
+      <button id="back" type="button" title="Go back to previous layer">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 12H7M11 8l-4 4 4 4" /></svg>
+      </button>
+      <button id="refresh" type="button" title="Re-generate output">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.95 10.5A5 5 0 1 0 17 13" /><path d="M17 6.5v4h-4" /></svg>
+      </button>
+      <button id="copy" type="button" title="Copy output to clipboard">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.5" y="9.5" width="8" height="8" rx="1.5" /><path d="M14.5 9.5V8A1.5 1.5 0 0 0 13 6.5H8A1.5 1.5 0 0 0 6.5 8v5A1.5 1.5 0 0 0 8 14.5h1.5" /></svg>
+      </button>
+      <label id="import" class="icon-button" for="import-file" aria-label="Import tokens" title="Import a tokens file as variables, shadow styles and text styles">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5.5v8M8.75 10.25 12 13.5l3.25-3.25" /><path d="M6.5 13v3a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-3" /></svg>
+      </label>
+      <input id="import-file" type="file" accept=".json,application/json" tabindex="-1" />
     </menu>
 
     <summary>
@@ -302,8 +310,9 @@
       const checkbox = document.getElementById("checkbox")
       const refresh = document.getElementById("refresh")
       const back = document.getElementById("back")
+      const copy = document.getElementById("copy")
+      const importFile = document.getElementById("import-file")
       const copyHint = document.getElementById("copy-hint")
-      const copyHintDefault = copyHint.textContent
       let copyHintTimeout
 
       // Mark a region while it is being scrolled; the mark is what fades its
@@ -326,10 +335,10 @@
       revealScrollbarWhileScrolling(summary)
 
       const showCopied = () => {
-        copyHint.textContent = "Copied!"
+        copyHint.textContent = "Copied to clipboard"
         clearTimeout(copyHintTimeout)
         copyHintTimeout = setTimeout(() => {
-          copyHint.textContent = copyHintDefault
+          copyHint.textContent = ""
         }, 1000)
       }
 
@@ -343,7 +352,7 @@
         showCopied()
       }
 
-      textarea.addEventListener("click", copyOutput)
+      copy.onclick = copyOutput
 
       const setLoading = () => {
         textarea.value = "Loading…"
@@ -366,6 +375,20 @@
       refresh.onclick = () => {
         setLoading()
         window.parent.postMessage({ pluginMessage: { type: "refresh" } }, "*")
+      }
+
+      importFile.onclick = () => {
+        importFile.value = ""
+      }
+
+      // The plugin parses the text itself, to keep the file's variable order.
+      importFile.onchange = async () => {
+        const file = importFile.files[0]
+
+        if (!file) return
+
+        setLoading()
+        window.parent.postMessage({ pluginMessage: { type: "import", tokens: await file.text() } }, "*")
       }
 
       back.onclick = () => {

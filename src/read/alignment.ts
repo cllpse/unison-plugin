@@ -40,13 +40,9 @@ export const readAlignmentFrame = (node: SceneNode & AutoLayoutMixin): Propertie
   const properties: Properties = {}
   const errors: ErrorOrWarning[] = []
 
+  // Without horizontal or vertical auto layout there's no alignment to read; readLayout reports that.
   if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
     properties[mapFrame[`${node.layoutMode}_${node.primaryAxisAlignItems}_${node.counterAxisAlignItems}`]] = true
-  } else {
-    errors.push({
-      nodeId: node.id,
-      message: `Error @ ${node.name} – ALIGNMENT mode must be "horizontal" or "vertical".`,
-    })
   }
 
   return { properties, errors, warnings: [] }

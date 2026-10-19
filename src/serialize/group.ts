@@ -6,7 +6,7 @@ export const serializeGroup = (node: GroupNode): PropertiesErrorOrWarning => {
     properties: {
       ...readIdentity(node),
 
-      "flow-vertical": true,
+      "autolayout-vertical": true,
       "width-fill": true,
       "height-fill": true,
       "alignment-top-left": true,
@@ -18,7 +18,7 @@ export const serializeGroup = (node: GroupNode): PropertiesErrorOrWarning => {
     warnings: [
       {
         nodeId: node.id,
-        message: `Notice @ "${node.name}" – GROUP layers are automatically converted into frames. Consider using a frame instead.`,
+        message: `Notice @ "${node.name}" – GROUP converted to frame.`,
       },
     ],
   }

@@ -1,23 +1,24 @@
-import type { FigmaFrameFlow } from "../../unison-components/src/types/figmaProperties"
+import type { FigmaFrameAutolayout } from "../../unison-components/src/types/figmaProperties"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
 
-const map: Record<string, keyof FigmaFrameFlow> = {
-  HORIZONTAL: "flow-horizontal",
-  VERTICAL: "flow-vertical",
-  GRID: "flow-grid",
+const map: Record<string, keyof FigmaFrameAutolayout> = {
+  HORIZONTAL: "autolayout-horizontal",
+  VERTICAL: "autolayout-vertical",
 }
 
 export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOrWarning => {
   const properties: Properties = {}
   const errors: ErrorOrWarning[] = []
 
-  if (node.layoutMode === "NONE") {
+  const flag = map[node.layoutMode]
+
+  if (!flag) {
     errors.push({
       nodeId: node.id,
-      message: `Error @ ${node.name} – LAYOUT value must be "horizontal", "vertical" or "grid".`,
+      message: `Error @ ${node.name} – FRAME has no auto layout.`,
     })
   } else {
-    properties[map[node.layoutMode]] = true
+    properties[flag] = true
 
     if (node.layoutMode === "HORIZONTAL" && node.layoutWrap === "WRAP") {
       properties.wrap = true

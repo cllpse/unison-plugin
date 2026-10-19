@@ -57,7 +57,8 @@ for (const [name, value] of Object.entries(COLORS)) {
     paletteHexes.add(hex)
   }
 
-  if (isRgbHex(value.brand) && !paletteHexes.has(value.brand)) {
+  // Tailwind's hues have no brand shade.
+  if ("brand" in value && isRgbHex(value.brand) && !paletteHexes.has(value.brand)) {
     addHexOwner(value.brand, `${name}-brand`)
   }
 }

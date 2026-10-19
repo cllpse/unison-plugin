@@ -20,6 +20,277 @@
   };
   var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
 
+  // src/legacyNames.ts
+  var canonicalName = (name) => name.split("/").map((part) => part.replace(/^unison-/, "")).join("-").replace(/^fill-/, "");
+  var adoptStyle = async (styles, name, create, apply) => {
+    const exact = styles.find((style2) => style2.name === name);
+    const older = styles.filter((style2) => style2 !== exact && canonicalName(style2.name) === canonicalName(name));
+    const found = exact != null ? exact : older.shift();
+    const style = found != null ? found : create();
+    style.name = name;
+    for (const copy of older) {
+      for (const { node } of await copy.getStyleConsumersAsync()) {
+        await apply(node, style);
+      }
+      copy.remove();
+    }
+    return { style, existed: found !== void 0 };
+  };
+
+  // src/createShadowStyles.ts
+  var SHADOW_VARIABLE = /^shadow-([^-]+)-(\d+)-(offset-x|offset-y|blur|spread|color)$/;
+  var FIELDS = {
+    "offset-x": "offsetX",
+    "offset-y": "offsetY",
+    blur: "radius",
+    spread: "spread",
+    color: "color"
+  };
+  var modeValue = (variable) => variable ? Object.values(variable.valuesByMode)[0] : void 0;
+  var numberOf = (variable) => {
+    const value = modeValue(variable);
+    return typeof value === "number" ? value : 0;
+  };
+  var colorOf = (variable) => {
+    const value = modeValue(variable);
+    if (value && typeof value === "object" && "r" in value) {
+      return __spreadValues({ a: 1 }, value);
+    }
+    return { r: 0, g: 0, b: 0, a: 0.1 };
+  };
+  var buildEffect = (layer) => {
+    let effect = {
+      type: "DROP_SHADOW",
+      visible: true,
+      blendMode: "NORMAL",
+      offset: { x: numberOf(layer["offset-x"]), y: numberOf(layer["offset-y"]) },
+      radius: numberOf(layer.blur),
+      spread: numberOf(layer.spread),
+      color: colorOf(layer.color)
+    };
+    for (const [field, variable] of Object.entries(layer)) {
+      if (variable) {
+        effect = figma.variables.setBoundVariableForEffect(effect, FIELDS[field], variable);
+      }
+    }
+    return effect;
+  };
+  var createShadowStyles = async () => {
+    var _a, _b;
+    if (figma.editorType !== "figma") {
+      return "Shadow styles need the Figma editor.";
+    }
+    const shadows = /* @__PURE__ */ new Map();
+    for (const variable of await figma.variables.getLocalVariablesAsync()) {
+      const match = variable.name.match(SHADOW_VARIABLE);
+      if (!match) continue;
+      const [, name, index, field] = match;
+      const layers = (_a = shadows.get(name)) != null ? _a : /* @__PURE__ */ new Map();
+      const layer = (_b = layers.get(Number(index))) != null ? _b : {};
+      layer[field] = variable;
+      layers.set(Number(index), layer);
+      shadows.set(name, layers);
+    }
+    if (shadows.size === 0) {
+      return "No shadow variables found.";
+    }
+    const styles = await figma.getLocalEffectStylesAsync();
+    let created = 0;
+    let updated = 0;
+    let previous = null;
+    for (const [name, layers] of shadows) {
+      const { style, existed } = await adoptStyle(
+        styles,
+        "shadow-".concat(name),
+        () => figma.createEffectStyle(),
+        async (node, adopted) => {
+          if ("setEffectStyleIdAsync" in node) await node.setEffectStyleIdAsync(adopted.id);
+        }
+      );
+      style.effects = [...layers.entries()].sort(([a], [b]) => a - b).map(([, layer]) => buildEffect(layer));
+      if (previous) figma.moveLocalEffectStyleAfter(style, previous);
+      previous = style;
+      if (existed) {
+        updated++;
+      } else {
+        created++;
+      }
+    }
+    return "Shadow styles: ".concat(created, " created, ").concat(updated, " updated.");
+  };
+
+  // src/createTextStyles.ts
+  var TYPOGRAPHY_VARIABLE = /^(font-size|line-height)-(.+)$/;
+  var DEFAULT_FONT = { family: "Inter", style: "Regular" };
+  var createTextStyles = async () => {
+    var _a, _b;
+    if (figma.editorType !== "figma") {
+      return "Text styles need the Figma editor.";
+    }
+    const sizes = /* @__PURE__ */ new Map();
+    for (const variable of await figma.variables.getLocalVariablesAsync("FLOAT")) {
+      const match = variable.name.match(TYPOGRAPHY_VARIABLE);
+      if (!match) continue;
+      const [, field, name] = match;
+      const size = (_a = sizes.get(name)) != null ? _a : {};
+      size[field] = variable;
+      sizes.set(name, size);
+    }
+    if (sizes.size === 0) {
+      return "No font-size variables found.";
+    }
+    const styles = await figma.getLocalTextStylesAsync();
+    let created = 0;
+    let updated = 0;
+    let previous = null;
+    for (const [name, size] of sizes) {
+      const fontSize = size["font-size"];
+      if (!fontSize) continue;
+      const { style, existed } = await adoptStyle(
+        styles,
+        "text-".concat(name),
+        () => figma.createTextStyle(),
+        async (node, adopted) => {
+          if (node.type === "TEXT") await node.setTextStyleIdAsync(adopted.id);
+        }
+      );
+      await figma.loadFontAsync(existed ? style.fontName : DEFAULT_FONT);
+      if (!existed) {
+        style.fontName = DEFAULT_FONT;
+      }
+      style.setBoundVariable("fontSize", fontSize);
+      style.setBoundVariable("lineHeight", (_b = size["line-height"]) != null ? _b : null);
+      if (previous) figma.moveLocalTextStyleAfter(style, previous);
+      previous = style;
+      if (existed) {
+        updated++;
+      } else {
+        created++;
+      }
+    }
+    return "Text styles: ".concat(created, " created, ").concat(updated, " updated.");
+  };
+
+  // src/importVariables.ts
+  var TYPES = {
+    color: "COLOR",
+    number: "FLOAT",
+    string: "STRING",
+    boolean: "BOOLEAN"
+  };
+  var KEY_MARK = "#";
+  var parseOrdered = (text) => {
+    const toMaps = (value) => {
+      if (Array.isArray(value)) return value.map(toMaps);
+      if (value && typeof value === "object") {
+        return new Map(Object.entries(value).map(([key, child]) => [key.slice(KEY_MARK.length), toMaps(child)]));
+      }
+      return value;
+    };
+    return toMaps(JSON.parse(text.replace(/"((?:[^"\\]|\\.)*)"(\s*:)/g, '"'.concat(KEY_MARK, '$1"$2'))));
+  };
+  var toObject = (value) => value instanceof Map ? Object.fromEntries([...value].map(([key, child]) => [key, toObject(child)])) : value;
+  var isNumberToken = (node) => node instanceof Map && node.get("$type") === "number";
+  var scaleOf = (name) => name.slice(0, Math.max(name.lastIndexOf("-"), 0));
+  var flatten = (group, path = "", tokens = /* @__PURE__ */ new Map()) => {
+    const children = [...group].filter(([key, node]) => !key.startsWith("$") && node instanceof Map);
+    const scales = [...new Set(children.map(([key]) => scaleOf(key)))];
+    const numberScales = new Set(
+      scales.filter((scale) => children.every(([key, node]) => scaleOf(key) !== scale || isNumberToken(node)))
+    );
+    children.sort(([keyA, a], [keyB, b]) => {
+      const scale = scales.indexOf(scaleOf(keyA)) - scales.indexOf(scaleOf(keyB));
+      if (scale !== 0 || !numberScales.has(scaleOf(keyA))) return scale;
+      return Number(a.get("$value")) - Number(b.get("$value"));
+    });
+    for (const [key, node] of children) {
+      const name = "".concat(path).concat(key);
+      if (node.has("$value")) {
+        tokens.set(name, toObject(node));
+      } else {
+        flatten(node, "".concat(name, "/"), tokens);
+      }
+    }
+    return tokens;
+  };
+  var valueOfToken = (token) => {
+    if (token.$type === "color") {
+      const { components, alpha } = token.$value;
+      return { r: components[0], g: components[1], b: components[2], a: alpha };
+    }
+    return token.$value;
+  };
+  var modeName = (mode) => {
+    const extensions = mode.get("$extensions");
+    const name = extensions instanceof Map ? extensions.get("com.figma.modeName") : void 0;
+    return typeof name === "string" ? name : "Default";
+  };
+  var importVariables = async (text) => {
+    var _a, _b, _c, _d, _e, _f;
+    if (figma.editorType !== "figma") {
+      return "Variables need the Figma editor.";
+    }
+    let file;
+    try {
+      file = typeof text === "string" ? parseOrdered(text) : void 0;
+    } catch (e) {
+      file = void 0;
+    }
+    if (!(file instanceof Map)) {
+      throw new Error("not a tokens file.");
+    }
+    const collectionsInFile = [...file].map(([name, modes]) => ({
+      name,
+      modes: modes instanceof Map ? [...modes.values()].filter((mode) => mode instanceof Map) : []
+    }));
+    if (collectionsInFile.length === 0 || collectionsInFile.some(({ modes }) => modes.length === 0)) {
+      throw new Error("not a tokens file.");
+    }
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    const variables = await figma.variables.getLocalVariablesAsync();
+    let created = 0;
+    let updated = 0;
+    for (const { name, modes } of collectionsInFile) {
+      const collection = (_b = (_a = collections.find((existing) => existing.name === name)) != null ? _a : collections.find((existing) => canonicalName(existing.name) === canonicalName(name))) != null ? _b : figma.variables.createVariableCollection(name);
+      collection.name = name;
+      const modeIds = modes.map((mode, i) => {
+        const existing = collection.modes.find((m) => m.name === modeName(mode));
+        if (existing) return existing.modeId;
+        if (i === 0) {
+          collection.renameMode(collection.defaultModeId, modeName(mode));
+          return collection.defaultModeId;
+        }
+        return collection.addMode(modeName(mode));
+      });
+      const inCollection = variables.filter((variable) => variable.variableCollectionId === collection.id);
+      const byName = new Map(inCollection.map((variable) => [variable.name, variable]));
+      const tokensByMode = modes.map((mode) => flatten(mode));
+      for (const [variableName, token] of tokensByMode[0]) {
+        const type = TYPES[token.$type];
+        if (!type) continue;
+        let variable = (_c = byName.get(variableName)) != null ? _c : inCollection.find(
+          (existing) => !tokensByMode[0].has(existing.name) && canonicalName(existing.name) === canonicalName(variableName)
+        );
+        if (variable && variable.resolvedType !== type) {
+          variable.remove();
+          variable = void 0;
+        }
+        if (variable) {
+          variable.name = variableName;
+          updated++;
+        } else {
+          variable = figma.variables.createVariable(variableName, collection, type);
+          created++;
+        }
+        variable.scopes = (_e = (_d = token.$extensions) == null ? void 0 : _d["com.figma.scopes"]) != null ? _e : ["ALL_SCOPES"];
+        for (const [i, tokens] of tokensByMode.entries()) {
+          variable.setValueForMode(modeIds[i], valueOfToken((_f = tokens.get(variableName)) != null ? _f : token));
+        }
+      }
+    }
+    return "Variables: ".concat(created, " created, ").concat(updated, " updated.");
+  };
+
   // src/placeholder.js
   var placeholder = "\n\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800Frame Plugin\n\u2800\u2800\u2800\u2800\u2800\u2800\u2800Figma Generator\n\n\u2800\u2800\u2800Select a frame to generate\n\u2800\u2800\u2800\u2800\u2800React component code\u2026\n";
   if (typeof window !== "undefined") {
@@ -107,8 +378,11168 @@
     return def;
   };
 
+  // unison-components/dist/tokens.json
+  var tokens_default = {
+    colors: {
+      Light: {
+        "fill-red-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9490196078431372,
+              0.9490196078431372
+            ],
+            alpha: 1,
+            hex: "#FEF2F2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8862745098039215,
+              0.8862745098039215
+            ],
+            alpha: 1,
+            hex: "#FFE2E2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.788235294117647,
+              0.788235294117647
+            ],
+            alpha: 1,
+            hex: "#FFC9C9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.6352941176470588,
+              0.6352941176470588
+            ],
+            alpha: 1,
+            hex: "#FFA2A2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.39215686274509803,
+              0.403921568627451
+            ],
+            alpha: 1,
+            hex: "#FF6467"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.984313725490196,
+              0.17254901960784313,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#FB2C36"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9058823529411765,
+              0,
+              0.043137254901960784
+            ],
+            alpha: 1,
+            hex: "#E7000B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7568627450980392,
+              0,
+              0.027450980392156862
+            ],
+            alpha: 1,
+            hex: "#C10007"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6235294117647059,
+              0.027450980392156862,
+              0.07058823529411765
+            ],
+            alpha: 1,
+            hex: "#9F0712"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5098039215686274,
+              0.09411764705882353,
+              0.10196078431372549
+            ],
+            alpha: 1,
+            hex: "#82181A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.27450980392156865,
+              0.03137254901960784,
+              0.03529411764705882
+            ],
+            alpha: 1,
+            hex: "#460809"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.9686274509803922,
+              0.9294117647058824
+            ],
+            alpha: 1,
+            hex: "#FFF7ED"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.9294117647058824,
+              0.8313725490196079
+            ],
+            alpha: 1,
+            hex: "#FFEDD4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8392156862745098,
+              0.6549019607843137
+            ],
+            alpha: 1,
+            hex: "#FFD6A7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.7215686274509804,
+              0.41568627450980394
+            ],
+            alpha: 1,
+            hex: "#FFB86A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.5372549019607843,
+              0.01568627450980392
+            ],
+            alpha: 1,
+            hex: "#FF8904"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.4117647058823529,
+              0
+            ],
+            alpha: 1,
+            hex: "#FF6900"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9607843137254902,
+              0.28627450980392155,
+              0
+            ],
+            alpha: 1,
+            hex: "#F54900"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.792156862745098,
+              0.20784313725490197,
+              0
+            ],
+            alpha: 1,
+            hex: "#CA3500"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6235294117647059,
+              0.17647058823529413,
+              0
+            ],
+            alpha: 1,
+            hex: "#9F2D00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.49411764705882355,
+              0.16470588235294117,
+              0.047058823529411764
+            ],
+            alpha: 1,
+            hex: "#7E2A0C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.26666666666666666,
+              0.07450980392156863,
+              0.023529411764705882
+            ],
+            alpha: 1,
+            hex: "#441306"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.984313725490196,
+              0.9215686274509803
+            ],
+            alpha: 1,
+            hex: "#FFFBEB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9529411764705882,
+              0.7764705882352941
+            ],
+            alpha: 1,
+            hex: "#FEF3C6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9019607843137255,
+              0.5215686274509804
+            ],
+            alpha: 1,
+            hex: "#FEE685"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8235294117647058,
+              0.18823529411764706
+            ],
+            alpha: 1,
+            hex: "#FFD230"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.7254901960784313,
+              0
+            ],
+            alpha: 1,
+            hex: "#FFB900"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.6039215686274509,
+              0
+            ],
+            alpha: 1,
+            hex: "#FE9A00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8823529411764706,
+              0.44313725490196076,
+              0
+            ],
+            alpha: 1,
+            hex: "#E17100"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7333333333333333,
+              0.30196078431372547,
+              0
+            ],
+            alpha: 1,
+            hex: "#BB4D00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.592156862745098,
+              0.23529411764705882,
+              0
+            ],
+            alpha: 1,
+            hex: "#973C00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4823529411764706,
+              0.2,
+              0.023529411764705882
+            ],
+            alpha: 1,
+            hex: "#7B3306"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.27450980392156865,
+              0.09803921568627451,
+              0.00392156862745098
+            ],
+            alpha: 1,
+            hex: "#461901"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9882352941176471,
+              0.9098039215686274
+            ],
+            alpha: 1,
+            hex: "#FEFCE8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9764705882352941,
+              0.7607843137254902
+            ],
+            alpha: 1,
+            hex: "#FEF9C2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.9411764705882353,
+              0.5215686274509804
+            ],
+            alpha: 1,
+            hex: "#FFF085"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8745098039215686,
+              0.12549019607843137
+            ],
+            alpha: 1,
+            hex: "#FFDF20"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9921568627450981,
+              0.7803921568627451,
+              0
+            ],
+            alpha: 1,
+            hex: "#FDC700"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9411764705882353,
+              0.6941176470588235,
+              0
+            ],
+            alpha: 1,
+            hex: "#F0B100"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8156862745098039,
+              0.5294117647058824,
+              0
+            ],
+            alpha: 1,
+            hex: "#D08700"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6509803921568628,
+              0.37254901960784315,
+              0
+            ],
+            alpha: 1,
+            hex: "#A65F00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5372549019607843,
+              0.29411764705882354,
+              0
+            ],
+            alpha: 1,
+            hex: "#894B00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.45098039215686275,
+              0.24313725490196078,
+              0.0392156862745098
+            ],
+            alpha: 1,
+            hex: "#733E0A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.2627450980392157,
+              0.12549019607843137,
+              0.01568627450980392
+            ],
+            alpha: 1,
+            hex: "#432004"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9686274509803922,
+              0.996078431372549,
+              0.9058823529411765
+            ],
+            alpha: 1,
+            hex: "#F7FEE7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9254901960784314,
+              0.9882352941176471,
+              0.792156862745098
+            ],
+            alpha: 1,
+            hex: "#ECFCCA"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8470588235294118,
+              0.9764705882352941,
+              0.6
+            ],
+            alpha: 1,
+            hex: "#D8F999"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7333333333333333,
+              0.9568627450980393,
+              0.3176470588235294
+            ],
+            alpha: 1,
+            hex: "#BBF451"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6039215686274509,
+              0.9019607843137255,
+              0
+            ],
+            alpha: 1,
+            hex: "#9AE600"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.48627450980392156,
+              0.8117647058823529,
+              0
+            ],
+            alpha: 1,
+            hex: "#7CCF00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3686274509803922,
+              0.6470588235294118,
+              0
+            ],
+            alpha: 1,
+            hex: "#5EA500"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.28627450980392155,
+              0.49019607843137253,
+              0
+            ],
+            alpha: 1,
+            hex: "#497D00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.23529411764705882,
+              0.38823529411764707,
+              0
+            ],
+            alpha: 1,
+            hex: "#3C6300"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.20784313725490197,
+              0.3254901960784314,
+              0.054901960784313725
+            ],
+            alpha: 1,
+            hex: "#35530E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.09803921568627451,
+              0.1803921568627451,
+              0.011764705882352941
+            ],
+            alpha: 1,
+            hex: "#192E03"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9411764705882353,
+              0.9921568627450981,
+              0.9568627450980393
+            ],
+            alpha: 1,
+            hex: "#F0FDF4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8627450980392157,
+              0.9882352941176471,
+              0.9058823529411765
+            ],
+            alpha: 1,
+            hex: "#DCFCE7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7254901960784313,
+              0.9725490196078431,
+              0.8117647058823529
+            ],
+            alpha: 1,
+            hex: "#B9F8CF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4823529411764706,
+              0.9450980392156862,
+              0.6588235294117647
+            ],
+            alpha: 1,
+            hex: "#7BF1A8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0196078431372549,
+              0.8745098039215686,
+              0.4470588235294118
+            ],
+            alpha: 1,
+            hex: "#05DF72"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.788235294117647,
+              0.3137254901960784
+            ],
+            alpha: 1,
+            hex: "#00C950"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.6509803921568628,
+              0.24313725490196078
+            ],
+            alpha: 1,
+            hex: "#00A63E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.5098039215686274,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#008236"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.00392156862745098,
+              0.4,
+              0.18823529411764706
+            ],
+            alpha: 1,
+            hex: "#016630"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.050980392156862744,
+              0.32941176470588235,
+              0.16862745098039217
+            ],
+            alpha: 1,
+            hex: "#0D542B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.011764705882352941,
+              0.1803921568627451,
+              0.08235294117647059
+            ],
+            alpha: 1,
+            hex: "#032E15"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9254901960784314,
+              0.9921568627450981,
+              0.9607843137254902
+            ],
+            alpha: 1,
+            hex: "#ECFDF5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8156862745098039,
+              0.9803921568627451,
+              0.8980392156862745
+            ],
+            alpha: 1,
+            hex: "#D0FAE5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6431372549019608,
+              0.9568627450980393,
+              0.8117647058823529
+            ],
+            alpha: 1,
+            hex: "#A4F4CF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3686274509803922,
+              0.9137254901960784,
+              0.7098039215686275
+            ],
+            alpha: 1,
+            hex: "#5EE9B5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.8313725490196079,
+              0.5725490196078431
+            ],
+            alpha: 1,
+            hex: "#00D492"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.7372549019607844,
+              0.49019607843137253
+            ],
+            alpha: 1,
+            hex: "#00BC7D"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.6,
+              0.4
+            ],
+            alpha: 1,
+            hex: "#009966"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.47843137254901963,
+              0.3333333333333333
+            ],
+            alpha: 1,
+            hex: "#007A55"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.3764705882352941,
+              0.27058823529411763
+            ],
+            alpha: 1,
+            hex: "#006045"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.30980392156862746,
+              0.23137254901960785
+            ],
+            alpha: 1,
+            hex: "#004F3B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.17254901960784313,
+              0.13333333333333333
+            ],
+            alpha: 1,
+            hex: "#002C22"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9411764705882353,
+              0.9921568627450981,
+              0.9803921568627451
+            ],
+            alpha: 1,
+            hex: "#F0FDFA"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.796078431372549,
+              0.984313725490196,
+              0.9450980392156862
+            ],
+            alpha: 1,
+            hex: "#CBFBF1"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5882352941176471,
+              0.9686274509803922,
+              0.8941176470588236
+            ],
+            alpha: 1,
+            hex: "#96F7E4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.27450980392156865,
+              0.9254901960784314,
+              0.8352941176470589
+            ],
+            alpha: 1,
+            hex: "#46ECD5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.8352941176470589,
+              0.7450980392156863
+            ],
+            alpha: 1,
+            hex: "#00D5BE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.7333333333333333,
+              0.6549019607843137
+            ],
+            alpha: 1,
+            hex: "#00BBA7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.5882352941176471,
+              0.5372549019607843
+            ],
+            alpha: 1,
+            hex: "#009689"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.47058823529411764,
+              0.43529411764705883
+            ],
+            alpha: 1,
+            hex: "#00786F"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.37254901960784315,
+              0.35294117647058826
+            ],
+            alpha: 1,
+            hex: "#005F5A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.043137254901960784,
+              0.30980392156862746,
+              0.2901960784313726
+            ],
+            alpha: 1,
+            hex: "#0B4F4A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.00784313725490196,
+              0.1843137254901961,
+              0.1803921568627451
+            ],
+            alpha: 1,
+            hex: "#022F2E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9254901960784314,
+              0.996078431372549,
+              1
+            ],
+            alpha: 1,
+            hex: "#ECFEFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.807843137254902,
+              0.9803921568627451,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#CEFAFE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6352941176470588,
+              0.9568627450980393,
+              0.9921568627450981
+            ],
+            alpha: 1,
+            hex: "#A2F4FD"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3254901960784314,
+              0.9176470588235294,
+              0.9921568627450981
+            ],
+            alpha: 1,
+            hex: "#53EAFD"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.8274509803921568,
+              0.9490196078431372
+            ],
+            alpha: 1,
+            hex: "#00D3F2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.7215686274509804,
+              0.8588235294117647
+            ],
+            alpha: 1,
+            hex: "#00B8DB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.5725490196078431,
+              0.7215686274509804
+            ],
+            alpha: 1,
+            hex: "#0092B8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.4588235294117647,
+              0.5843137254901961
+            ],
+            alpha: 1,
+            hex: "#007595"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.37254901960784315,
+              0.47058823529411764
+            ],
+            alpha: 1,
+            hex: "#005F78"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.06274509803921569,
+              0.3058823529411765,
+              0.39215686274509803
+            ],
+            alpha: 1,
+            hex: "#104E64"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0196078431372549,
+              0.2,
+              0.27058823529411763
+            ],
+            alpha: 1,
+            hex: "#053345"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9411764705882353,
+              0.9764705882352941,
+              1
+            ],
+            alpha: 1,
+            hex: "#F0F9FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8745098039215686,
+              0.9490196078431372,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#DFF2FE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7215686274509804,
+              0.9019607843137255,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#B8E6FE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4549019607843137,
+              0.8313725490196079,
+              1
+            ],
+            alpha: 1,
+            hex: "#74D4FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.7372549019607844,
+              1
+            ],
+            alpha: 1,
+            hex: "#00BCFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.6509803921568628,
+              0.9568627450980393
+            ],
+            alpha: 1,
+            hex: "#00A6F4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.5176470588235295,
+              0.8196078431372549
+            ],
+            alpha: 1,
+            hex: "#0084D1"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.4117647058823529,
+              0.6588235294117647
+            ],
+            alpha: 1,
+            hex: "#0069A8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.34901960784313724,
+              0.5411764705882353
+            ],
+            alpha: 1,
+            hex: "#00598A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.00784313725490196,
+              0.2901960784313726,
+              0.4392156862745098
+            ],
+            alpha: 1,
+            hex: "#024A70"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0196078431372549,
+              0.1843137254901961,
+              0.2901960784313726
+            ],
+            alpha: 1,
+            hex: "#052F4A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9372549019607843,
+              0.9647058823529412,
+              1
+            ],
+            alpha: 1,
+            hex: "#EFF6FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8588235294117647,
+              0.9176470588235294,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#DBEAFE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7450980392156863,
+              0.8588235294117647,
+              1
+            ],
+            alpha: 1,
+            hex: "#BEDBFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5568627450980392,
+              0.7725490196078432,
+              1
+            ],
+            alpha: 1,
+            hex: "#8EC5FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3176470588235294,
+              0.6352941176470588,
+              1
+            ],
+            alpha: 1,
+            hex: "#51A2FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.16862745098039217,
+              0.4980392156862745,
+              1
+            ],
+            alpha: 1,
+            hex: "#2B7FFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.08235294117647059,
+              0.36470588235294116,
+              0.9882352941176471
+            ],
+            alpha: 1,
+            hex: "#155DFC"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0784313725490196,
+              0.2784313725490196,
+              0.9019607843137255
+            ],
+            alpha: 1,
+            hex: "#1447E6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.09803921568627451,
+              0.23529411764705882,
+              0.7215686274509804
+            ],
+            alpha: 1,
+            hex: "#193CB8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.10980392156862745,
+              0.2235294117647059,
+              0.5568627450980392
+            ],
+            alpha: 1,
+            hex: "#1C398E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.08627450980392157,
+              0.1411764705882353,
+              0.33725490196078434
+            ],
+            alpha: 1,
+            hex: "#162456"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9333333333333333,
+              0.9490196078431372,
+              1
+            ],
+            alpha: 1,
+            hex: "#EEF2FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8784313725490196,
+              0.9058823529411765,
+              1
+            ],
+            alpha: 1,
+            hex: "#E0E7FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7764705882352941,
+              0.8235294117647058,
+              1
+            ],
+            alpha: 1,
+            hex: "#C6D2FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6392156862745098,
+              0.7019607843137254,
+              1
+            ],
+            alpha: 1,
+            hex: "#A3B3FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.48627450980392156,
+              0.5254901960784314,
+              1
+            ],
+            alpha: 1,
+            hex: "#7C86FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3803921568627451,
+              0.37254901960784315,
+              1
+            ],
+            alpha: 1,
+            hex: "#615FFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.30980392156862746,
+              0.2235294117647059,
+              0.9647058823529412
+            ],
+            alpha: 1,
+            hex: "#4F39F6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.2627450980392157,
+              0.17647058823529413,
+              0.8431372549019608
+            ],
+            alpha: 1,
+            hex: "#432DD7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.21568627450980393,
+              0.16470588235294117,
+              0.6745098039215687
+            ],
+            alpha: 1,
+            hex: "#372AAC"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.19215686274509805,
+              0.17254901960784313,
+              0.5215686274509804
+            ],
+            alpha: 1,
+            hex: "#312C85"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.11764705882352941,
+              0.10196078431372549,
+              0.30196078431372547
+            ],
+            alpha: 1,
+            hex: "#1E1A4D"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9607843137254902,
+              0.9529411764705882,
+              1
+            ],
+            alpha: 1,
+            hex: "#F5F3FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9294117647058824,
+              0.9137254901960784,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#EDE9FE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8666666666666667,
+              0.8392156862745098,
+              1
+            ],
+            alpha: 1,
+            hex: "#DDD6FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7686274509803922,
+              0.7058823529411765,
+              1
+            ],
+            alpha: 1,
+            hex: "#C4B4FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6509803921568628,
+              0.5176470588235295,
+              1
+            ],
+            alpha: 1,
+            hex: "#A684FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5568627450980392,
+              0.3176470588235294,
+              1
+            ],
+            alpha: 1,
+            hex: "#8E51FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4980392156862745,
+              0.13333333333333333,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#7F22FE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4392156862745098,
+              0.03137254901960784,
+              0.9058823529411765
+            ],
+            alpha: 1,
+            hex: "#7008E7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.36470588235294116,
+              0.054901960784313725,
+              0.7529411764705882
+            ],
+            alpha: 1,
+            hex: "#5D0EC0"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.30196078431372547,
+              0.09019607843137255,
+              0.6039215686274509
+            ],
+            alpha: 1,
+            hex: "#4D179A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.1843137254901961,
+              0.050980392156862744,
+              0.40784313725490196
+            ],
+            alpha: 1,
+            hex: "#2F0D68"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9803921568627451,
+              0.9607843137254902,
+              1
+            ],
+            alpha: 1,
+            hex: "#FAF5FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9529411764705882,
+              0.9098039215686274,
+              1
+            ],
+            alpha: 1,
+            hex: "#F3E8FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9137254901960784,
+              0.8313725490196079,
+              1
+            ],
+            alpha: 1,
+            hex: "#E9D4FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8549019607843137,
+              0.6980392156862745,
+              1
+            ],
+            alpha: 1,
+            hex: "#DAB2FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7607843137254902,
+              0.47843137254901963,
+              1
+            ],
+            alpha: 1,
+            hex: "#C27AFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6784313725490196,
+              0.27450980392156865,
+              1
+            ],
+            alpha: 1,
+            hex: "#AD46FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.596078431372549,
+              0.06274509803921569,
+              0.9803921568627451
+            ],
+            alpha: 1,
+            hex: "#9810FA"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5098039215686274,
+              0,
+              0.8588235294117647
+            ],
+            alpha: 1,
+            hex: "#8200DB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.43137254901960786,
+              0.06666666666666667,
+              0.6901960784313725
+            ],
+            alpha: 1,
+            hex: "#6E11B0"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.34901960784313724,
+              0.08627450980392157,
+              0.5450980392156862
+            ],
+            alpha: 1,
+            hex: "#59168B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.23529411764705882,
+              0.011764705882352941,
+              0.4
+            ],
+            alpha: 1,
+            hex: "#3C0366"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9921568627450981,
+              0.9568627450980393,
+              1
+            ],
+            alpha: 1,
+            hex: "#FDF4FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9803921568627451,
+              0.9098039215686274,
+              1
+            ],
+            alpha: 1,
+            hex: "#FAE8FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9647058823529412,
+              0.8117647058823529,
+              1
+            ],
+            alpha: 1,
+            hex: "#F6CFFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9568627450980393,
+              0.6588235294117647,
+              1
+            ],
+            alpha: 1,
+            hex: "#F4A8FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9294117647058824,
+              0.41568627450980394,
+              1
+            ],
+            alpha: 1,
+            hex: "#ED6AFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8823529411764706,
+              0.16470588235294117,
+              0.984313725490196
+            ],
+            alpha: 1,
+            hex: "#E12AFB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7843137254901961,
+              0,
+              0.8705882352941177
+            ],
+            alpha: 1,
+            hex: "#C800DE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6588235294117647,
+              0,
+              0.7176470588235294
+            ],
+            alpha: 1,
+            hex: "#A800B7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5411764705882353,
+              0.00392156862745098,
+              0.5803921568627451
+            ],
+            alpha: 1,
+            hex: "#8A0194"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4470588235294118,
+              0.07450980392156863,
+              0.47058823529411764
+            ],
+            alpha: 1,
+            hex: "#721378"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.29411764705882354,
+              0,
+              0.30980392156862746
+            ],
+            alpha: 1,
+            hex: "#4B004F"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9921568627450981,
+              0.9490196078431372,
+              0.9725490196078431
+            ],
+            alpha: 1,
+            hex: "#FDF2F8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9882352941176471,
+              0.9058823529411765,
+              0.9529411764705882
+            ],
+            alpha: 1,
+            hex: "#FCE7F3"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9882352941176471,
+              0.807843137254902,
+              0.9098039215686274
+            ],
+            alpha: 1,
+            hex: "#FCCEE8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9921568627450981,
+              0.6470588235294118,
+              0.8352941176470589
+            ],
+            alpha: 1,
+            hex: "#FDA5D5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.984313725490196,
+              0.39215686274509803,
+              0.7137254901960784
+            ],
+            alpha: 1,
+            hex: "#FB64B6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9647058823529412,
+              0.2,
+              0.6039215686274509
+            ],
+            alpha: 1,
+            hex: "#F6339A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9019607843137255,
+              0,
+              0.4627450980392157
+            ],
+            alpha: 1,
+            hex: "#E60076"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7764705882352941,
+              0,
+              0.3607843137254902
+            ],
+            alpha: 1,
+            hex: "#C6005C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6392156862745098,
+              0,
+              0.2980392156862745
+            ],
+            alpha: 1,
+            hex: "#A3004C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5254901960784314,
+              0.06274509803921569,
+              0.2627450980392157
+            ],
+            alpha: 1,
+            hex: "#861043"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3176470588235294,
+              0.01568627450980392,
+              0.1411764705882353
+            ],
+            alpha: 1,
+            hex: "#510424"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.9450980392156862,
+              0.9490196078431372
+            ],
+            alpha: 1,
+            hex: "#FFF1F2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8941176470588236,
+              0.9019607843137255
+            ],
+            alpha: 1,
+            hex: "#FFE4E6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8,
+              0.8274509803921568
+            ],
+            alpha: 1,
+            hex: "#FFCCD3"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.6313725490196078,
+              0.6784313725490196
+            ],
+            alpha: 1,
+            hex: "#FFA1AD"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.38823529411764707,
+              0.49411764705882355
+            ],
+            alpha: 1,
+            hex: "#FF637E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.12549019607843137,
+              0.33725490196078434
+            ],
+            alpha: 1,
+            hex: "#FF2056"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9254901960784314,
+              0,
+              0.24705882352941178
+            ],
+            alpha: 1,
+            hex: "#EC003F"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7803921568627451,
+              0,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#C70036"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6470588235294118,
+              0,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#A50036"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5450980392156862,
+              0.03137254901960784,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#8B0836"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.30196078431372547,
+              0.00784313725490196,
+              0.09411764705882353
+            ],
+            alpha: 1,
+            hex: "#4D0218"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9725490196078431,
+              0.9803921568627451,
+              0.9882352941176471
+            ],
+            alpha: 1,
+            hex: "#F8FAFC"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9450980392156862,
+              0.9607843137254902,
+              0.9764705882352941
+            ],
+            alpha: 1,
+            hex: "#F1F5F9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8862745098039215,
+              0.9098039215686274,
+              0.9411764705882353
+            ],
+            alpha: 1,
+            hex: "#E2E8F0"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.792156862745098,
+              0.8352941176470589,
+              0.8862745098039215
+            ],
+            alpha: 1,
+            hex: "#CAD5E2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5647058823529412,
+              0.6313725490196078,
+              0.7254901960784313
+            ],
+            alpha: 1,
+            hex: "#90A1B9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3843137254901961,
+              0.4549019607843137,
+              0.5568627450980392
+            ],
+            alpha: 1,
+            hex: "#62748E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.27058823529411763,
+              0.3333333333333333,
+              0.4235294117647059
+            ],
+            alpha: 1,
+            hex: "#45556C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.19215686274509805,
+              0.2549019607843137,
+              0.34509803921568627
+            ],
+            alpha: 1,
+            hex: "#314158"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.11372549019607843,
+              0.1607843137254902,
+              0.23921568627450981
+            ],
+            alpha: 1,
+            hex: "#1D293D"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.058823529411764705,
+              0.09019607843137255,
+              0.16862745098039217
+            ],
+            alpha: 1,
+            hex: "#0F172B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.00784313725490196,
+              0.023529411764705882,
+              0.09411764705882353
+            ],
+            alpha: 1,
+            hex: "#020618"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9764705882352941,
+              0.9803921568627451,
+              0.984313725490196
+            ],
+            alpha: 1,
+            hex: "#F9FAFB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9529411764705882,
+              0.9568627450980393,
+              0.9647058823529412
+            ],
+            alpha: 1,
+            hex: "#F3F4F6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8980392156862745,
+              0.9058823529411765,
+              0.9215686274509803
+            ],
+            alpha: 1,
+            hex: "#E5E7EB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8196078431372549,
+              0.8352941176470589,
+              0.8627450980392157
+            ],
+            alpha: 1,
+            hex: "#D1D5DC"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6,
+              0.6313725490196078,
+              0.6862745098039216
+            ],
+            alpha: 1,
+            hex: "#99A1AF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.41568627450980394,
+              0.4470588235294118,
+              0.5098039215686274
+            ],
+            alpha: 1,
+            hex: "#6A7282"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.2901960784313726,
+              0.3333333333333333,
+              0.396078431372549
+            ],
+            alpha: 1,
+            hex: "#4A5565"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.21176470588235294,
+              0.2549019607843137,
+              0.3254901960784314
+            ],
+            alpha: 1,
+            hex: "#364153"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.11764705882352941,
+              0.1607843137254902,
+              0.2235294117647059
+            ],
+            alpha: 1,
+            hex: "#1E2939"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.06274509803921569,
+              0.09411764705882353,
+              0.1568627450980392
+            ],
+            alpha: 1,
+            hex: "#101828"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.011764705882352941,
+              0.027450980392156862,
+              0.07058823529411765
+            ],
+            alpha: 1,
+            hex: "#030712"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9803921568627451,
+              0.9803921568627451,
+              0.9803921568627451
+            ],
+            alpha: 1,
+            hex: "#FAFAFA"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9568627450980393,
+              0.9568627450980393,
+              0.9607843137254902
+            ],
+            alpha: 1,
+            hex: "#F4F4F5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8941176470588236,
+              0.8941176470588236,
+              0.9058823529411765
+            ],
+            alpha: 1,
+            hex: "#E4E4E7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8313725490196079,
+              0.8313725490196079,
+              0.8470588235294118
+            ],
+            alpha: 1,
+            hex: "#D4D4D8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6235294117647059,
+              0.6235294117647059,
+              0.6627450980392157
+            ],
+            alpha: 1,
+            hex: "#9F9FA9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.44313725490196076,
+              0.44313725490196076,
+              0.4823529411764706
+            ],
+            alpha: 1,
+            hex: "#71717B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3215686274509804,
+              0.3215686274509804,
+              0.3607843137254902
+            ],
+            alpha: 1,
+            hex: "#52525C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.24705882352941178,
+              0.24705882352941178,
+              0.27450980392156865
+            ],
+            alpha: 1,
+            hex: "#3F3F46"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.15294117647058825,
+              0.15294117647058825,
+              0.16470588235294117
+            ],
+            alpha: 1,
+            hex: "#27272A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.09411764705882353,
+              0.09411764705882353,
+              0.10588235294117647
+            ],
+            alpha: 1,
+            hex: "#18181B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.03529411764705882,
+              0.03529411764705882,
+              0.043137254901960784
+            ],
+            alpha: 1,
+            hex: "#09090B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9764705882352941,
+              0.9764705882352941,
+              0.9764705882352941
+            ],
+            alpha: 1,
+            hex: "#F9F9F9"
+          },
+          $extensions: {
+            "com.figma.variableId": "VariableID:1:4",
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9607843137254902,
+              0.9607843137254902,
+              0.9607843137254902
+            ],
+            alpha: 1,
+            hex: "#F5F5F5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8980392156862745,
+              0.8980392156862745,
+              0.8980392156862745
+            ],
+            alpha: 1,
+            hex: "#E5E5E5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8313725490196079,
+              0.8313725490196079,
+              0.8313725490196079
+            ],
+            alpha: 1,
+            hex: "#D4D4D4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6313725490196078,
+              0.6313725490196078,
+              0.6313725490196078
+            ],
+            alpha: 1,
+            hex: "#A1A1A1"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.45098039215686275,
+              0.45098039215686275,
+              0.45098039215686275
+            ],
+            alpha: 1,
+            hex: "#737373"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3215686274509804,
+              0.3215686274509804,
+              0.3215686274509804
+            ],
+            alpha: 1,
+            hex: "#525252"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.25098039215686274,
+              0.25098039215686274,
+              0.25098039215686274
+            ],
+            alpha: 1,
+            hex: "#404040"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.14901960784313725,
+              0.14901960784313725,
+              0.14901960784313725
+            ],
+            alpha: 1,
+            hex: "#262626"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.06666666666666667,
+              0.06666666666666667,
+              0.06666666666666667
+            ],
+            alpha: 1,
+            hex: "#111111"
+          },
+          $extensions: {
+            "com.figma.variableId": "VariableID:3:2",
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0392156862745098,
+              0.0392156862745098,
+              0.0392156862745098
+            ],
+            alpha: 1,
+            hex: "#0A0A0A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9803921568627451,
+              0.9803921568627451,
+              0.9764705882352941
+            ],
+            alpha: 1,
+            hex: "#FAFAF9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9607843137254902,
+              0.9607843137254902,
+              0.9568627450980393
+            ],
+            alpha: 1,
+            hex: "#F5F5F4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9058823529411765,
+              0.8980392156862745,
+              0.8941176470588236
+            ],
+            alpha: 1,
+            hex: "#E7E5E4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8392156862745098,
+              0.8274509803921568,
+              0.8196078431372549
+            ],
+            alpha: 1,
+            hex: "#D6D3D1"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6509803921568628,
+              0.6274509803921569,
+              0.6078431372549019
+            ],
+            alpha: 1,
+            hex: "#A6A09B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4745098039215686,
+              0.44313725490196076,
+              0.4196078431372549
+            ],
+            alpha: 1,
+            hex: "#79716B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3411764705882353,
+              0.3254901960784314,
+              0.30196078431372547
+            ],
+            alpha: 1,
+            hex: "#57534D"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.26666666666666666,
+              0.25098039215686274,
+              0.23137254901960785
+            ],
+            alpha: 1,
+            hex: "#44403B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.1607843137254902,
+              0.1450980392156863,
+              0.1411764705882353
+            ],
+            alpha: 1,
+            hex: "#292524"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.10980392156862745,
+              0.09803921568627451,
+              0.09019607843137255
+            ],
+            alpha: 1,
+            hex: "#1C1917"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.047058823529411764,
+              0.0392156862745098,
+              0.03529411764705882
+            ],
+            alpha: 1,
+            hex: "#0C0A09"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-white": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              1,
+              1
+            ],
+            alpha: 1,
+            hex: "#FFFFFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-black": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        $extensions: {
+          "com.figma.modeName": "Light"
+        }
+      },
+      Dark: {
+        "fill-red-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.27450980392156865,
+              0.03137254901960784,
+              0.03529411764705882
+            ],
+            alpha: 1,
+            hex: "#460809"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5098039215686274,
+              0.09411764705882353,
+              0.10196078431372549
+            ],
+            alpha: 1,
+            hex: "#82181A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6235294117647059,
+              0.027450980392156862,
+              0.07058823529411765
+            ],
+            alpha: 1,
+            hex: "#9F0712"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7568627450980392,
+              0,
+              0.027450980392156862
+            ],
+            alpha: 1,
+            hex: "#C10007"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9058823529411765,
+              0,
+              0.043137254901960784
+            ],
+            alpha: 1,
+            hex: "#E7000B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.984313725490196,
+              0.17254901960784313,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#FB2C36"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.39215686274509803,
+              0.403921568627451
+            ],
+            alpha: 1,
+            hex: "#FF6467"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.6352941176470588,
+              0.6352941176470588
+            ],
+            alpha: 1,
+            hex: "#FFA2A2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.788235294117647,
+              0.788235294117647
+            ],
+            alpha: 1,
+            hex: "#FFC9C9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8862745098039215,
+              0.8862745098039215
+            ],
+            alpha: 1,
+            hex: "#FFE2E2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-red-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9490196078431372,
+              0.9490196078431372
+            ],
+            alpha: 1,
+            hex: "#FEF2F2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.26666666666666666,
+              0.07450980392156863,
+              0.023529411764705882
+            ],
+            alpha: 1,
+            hex: "#441306"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.49411764705882355,
+              0.16470588235294117,
+              0.047058823529411764
+            ],
+            alpha: 1,
+            hex: "#7E2A0C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6235294117647059,
+              0.17647058823529413,
+              0
+            ],
+            alpha: 1,
+            hex: "#9F2D00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.792156862745098,
+              0.20784313725490197,
+              0
+            ],
+            alpha: 1,
+            hex: "#CA3500"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9607843137254902,
+              0.28627450980392155,
+              0
+            ],
+            alpha: 1,
+            hex: "#F54900"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.4117647058823529,
+              0
+            ],
+            alpha: 1,
+            hex: "#FF6900"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.5372549019607843,
+              0.01568627450980392
+            ],
+            alpha: 1,
+            hex: "#FF8904"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.7215686274509804,
+              0.41568627450980394
+            ],
+            alpha: 1,
+            hex: "#FFB86A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8392156862745098,
+              0.6549019607843137
+            ],
+            alpha: 1,
+            hex: "#FFD6A7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.9294117647058824,
+              0.8313725490196079
+            ],
+            alpha: 1,
+            hex: "#FFEDD4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-orange-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.9686274509803922,
+              0.9294117647058824
+            ],
+            alpha: 1,
+            hex: "#FFF7ED"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.27450980392156865,
+              0.09803921568627451,
+              0.00392156862745098
+            ],
+            alpha: 1,
+            hex: "#461901"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4823529411764706,
+              0.2,
+              0.023529411764705882
+            ],
+            alpha: 1,
+            hex: "#7B3306"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.592156862745098,
+              0.23529411764705882,
+              0
+            ],
+            alpha: 1,
+            hex: "#973C00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7333333333333333,
+              0.30196078431372547,
+              0
+            ],
+            alpha: 1,
+            hex: "#BB4D00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8823529411764706,
+              0.44313725490196076,
+              0
+            ],
+            alpha: 1,
+            hex: "#E17100"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.6039215686274509,
+              0
+            ],
+            alpha: 1,
+            hex: "#FE9A00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.7254901960784313,
+              0
+            ],
+            alpha: 1,
+            hex: "#FFB900"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8235294117647058,
+              0.18823529411764706
+            ],
+            alpha: 1,
+            hex: "#FFD230"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9019607843137255,
+              0.5215686274509804
+            ],
+            alpha: 1,
+            hex: "#FEE685"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9529411764705882,
+              0.7764705882352941
+            ],
+            alpha: 1,
+            hex: "#FEF3C6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-amber-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.984313725490196,
+              0.9215686274509803
+            ],
+            alpha: 1,
+            hex: "#FFFBEB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.2627450980392157,
+              0.12549019607843137,
+              0.01568627450980392
+            ],
+            alpha: 1,
+            hex: "#432004"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.45098039215686275,
+              0.24313725490196078,
+              0.0392156862745098
+            ],
+            alpha: 1,
+            hex: "#733E0A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5372549019607843,
+              0.29411764705882354,
+              0
+            ],
+            alpha: 1,
+            hex: "#894B00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6509803921568628,
+              0.37254901960784315,
+              0
+            ],
+            alpha: 1,
+            hex: "#A65F00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8156862745098039,
+              0.5294117647058824,
+              0
+            ],
+            alpha: 1,
+            hex: "#D08700"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9411764705882353,
+              0.6941176470588235,
+              0
+            ],
+            alpha: 1,
+            hex: "#F0B100"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9921568627450981,
+              0.7803921568627451,
+              0
+            ],
+            alpha: 1,
+            hex: "#FDC700"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8745098039215686,
+              0.12549019607843137
+            ],
+            alpha: 1,
+            hex: "#FFDF20"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.9411764705882353,
+              0.5215686274509804
+            ],
+            alpha: 1,
+            hex: "#FFF085"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9764705882352941,
+              0.7607843137254902
+            ],
+            alpha: 1,
+            hex: "#FEF9C2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-yellow-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.996078431372549,
+              0.9882352941176471,
+              0.9098039215686274
+            ],
+            alpha: 1,
+            hex: "#FEFCE8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.09803921568627451,
+              0.1803921568627451,
+              0.011764705882352941
+            ],
+            alpha: 1,
+            hex: "#192E03"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.20784313725490197,
+              0.3254901960784314,
+              0.054901960784313725
+            ],
+            alpha: 1,
+            hex: "#35530E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.23529411764705882,
+              0.38823529411764707,
+              0
+            ],
+            alpha: 1,
+            hex: "#3C6300"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.28627450980392155,
+              0.49019607843137253,
+              0
+            ],
+            alpha: 1,
+            hex: "#497D00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3686274509803922,
+              0.6470588235294118,
+              0
+            ],
+            alpha: 1,
+            hex: "#5EA500"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.48627450980392156,
+              0.8117647058823529,
+              0
+            ],
+            alpha: 1,
+            hex: "#7CCF00"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6039215686274509,
+              0.9019607843137255,
+              0
+            ],
+            alpha: 1,
+            hex: "#9AE600"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7333333333333333,
+              0.9568627450980393,
+              0.3176470588235294
+            ],
+            alpha: 1,
+            hex: "#BBF451"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8470588235294118,
+              0.9764705882352941,
+              0.6
+            ],
+            alpha: 1,
+            hex: "#D8F999"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9254901960784314,
+              0.9882352941176471,
+              0.792156862745098
+            ],
+            alpha: 1,
+            hex: "#ECFCCA"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-lime-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9686274509803922,
+              0.996078431372549,
+              0.9058823529411765
+            ],
+            alpha: 1,
+            hex: "#F7FEE7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.011764705882352941,
+              0.1803921568627451,
+              0.08235294117647059
+            ],
+            alpha: 1,
+            hex: "#032E15"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.050980392156862744,
+              0.32941176470588235,
+              0.16862745098039217
+            ],
+            alpha: 1,
+            hex: "#0D542B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.00392156862745098,
+              0.4,
+              0.18823529411764706
+            ],
+            alpha: 1,
+            hex: "#016630"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.5098039215686274,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#008236"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.6509803921568628,
+              0.24313725490196078
+            ],
+            alpha: 1,
+            hex: "#00A63E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.788235294117647,
+              0.3137254901960784
+            ],
+            alpha: 1,
+            hex: "#00C950"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0196078431372549,
+              0.8745098039215686,
+              0.4470588235294118
+            ],
+            alpha: 1,
+            hex: "#05DF72"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4823529411764706,
+              0.9450980392156862,
+              0.6588235294117647
+            ],
+            alpha: 1,
+            hex: "#7BF1A8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7254901960784313,
+              0.9725490196078431,
+              0.8117647058823529
+            ],
+            alpha: 1,
+            hex: "#B9F8CF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8627450980392157,
+              0.9882352941176471,
+              0.9058823529411765
+            ],
+            alpha: 1,
+            hex: "#DCFCE7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-green-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9411764705882353,
+              0.9921568627450981,
+              0.9568627450980393
+            ],
+            alpha: 1,
+            hex: "#F0FDF4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.17254901960784313,
+              0.13333333333333333
+            ],
+            alpha: 1,
+            hex: "#002C22"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.30980392156862746,
+              0.23137254901960785
+            ],
+            alpha: 1,
+            hex: "#004F3B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.3764705882352941,
+              0.27058823529411763
+            ],
+            alpha: 1,
+            hex: "#006045"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.47843137254901963,
+              0.3333333333333333
+            ],
+            alpha: 1,
+            hex: "#007A55"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.6,
+              0.4
+            ],
+            alpha: 1,
+            hex: "#009966"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.7372549019607844,
+              0.49019607843137253
+            ],
+            alpha: 1,
+            hex: "#00BC7D"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.8313725490196079,
+              0.5725490196078431
+            ],
+            alpha: 1,
+            hex: "#00D492"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3686274509803922,
+              0.9137254901960784,
+              0.7098039215686275
+            ],
+            alpha: 1,
+            hex: "#5EE9B5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6431372549019608,
+              0.9568627450980393,
+              0.8117647058823529
+            ],
+            alpha: 1,
+            hex: "#A4F4CF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8156862745098039,
+              0.9803921568627451,
+              0.8980392156862745
+            ],
+            alpha: 1,
+            hex: "#D0FAE5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-emerald-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9254901960784314,
+              0.9921568627450981,
+              0.9607843137254902
+            ],
+            alpha: 1,
+            hex: "#ECFDF5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.00784313725490196,
+              0.1843137254901961,
+              0.1803921568627451
+            ],
+            alpha: 1,
+            hex: "#022F2E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.043137254901960784,
+              0.30980392156862746,
+              0.2901960784313726
+            ],
+            alpha: 1,
+            hex: "#0B4F4A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.37254901960784315,
+              0.35294117647058826
+            ],
+            alpha: 1,
+            hex: "#005F5A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.47058823529411764,
+              0.43529411764705883
+            ],
+            alpha: 1,
+            hex: "#00786F"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.5882352941176471,
+              0.5372549019607843
+            ],
+            alpha: 1,
+            hex: "#009689"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.7333333333333333,
+              0.6549019607843137
+            ],
+            alpha: 1,
+            hex: "#00BBA7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.8352941176470589,
+              0.7450980392156863
+            ],
+            alpha: 1,
+            hex: "#00D5BE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.27450980392156865,
+              0.9254901960784314,
+              0.8352941176470589
+            ],
+            alpha: 1,
+            hex: "#46ECD5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5882352941176471,
+              0.9686274509803922,
+              0.8941176470588236
+            ],
+            alpha: 1,
+            hex: "#96F7E4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.796078431372549,
+              0.984313725490196,
+              0.9450980392156862
+            ],
+            alpha: 1,
+            hex: "#CBFBF1"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-teal-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9411764705882353,
+              0.9921568627450981,
+              0.9803921568627451
+            ],
+            alpha: 1,
+            hex: "#F0FDFA"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0196078431372549,
+              0.2,
+              0.27058823529411763
+            ],
+            alpha: 1,
+            hex: "#053345"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.06274509803921569,
+              0.3058823529411765,
+              0.39215686274509803
+            ],
+            alpha: 1,
+            hex: "#104E64"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.37254901960784315,
+              0.47058823529411764
+            ],
+            alpha: 1,
+            hex: "#005F78"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.4588235294117647,
+              0.5843137254901961
+            ],
+            alpha: 1,
+            hex: "#007595"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.5725490196078431,
+              0.7215686274509804
+            ],
+            alpha: 1,
+            hex: "#0092B8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.7215686274509804,
+              0.8588235294117647
+            ],
+            alpha: 1,
+            hex: "#00B8DB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.8274509803921568,
+              0.9490196078431372
+            ],
+            alpha: 1,
+            hex: "#00D3F2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3254901960784314,
+              0.9176470588235294,
+              0.9921568627450981
+            ],
+            alpha: 1,
+            hex: "#53EAFD"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6352941176470588,
+              0.9568627450980393,
+              0.9921568627450981
+            ],
+            alpha: 1,
+            hex: "#A2F4FD"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.807843137254902,
+              0.9803921568627451,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#CEFAFE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-cyan-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9254901960784314,
+              0.996078431372549,
+              1
+            ],
+            alpha: 1,
+            hex: "#ECFEFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0196078431372549,
+              0.1843137254901961,
+              0.2901960784313726
+            ],
+            alpha: 1,
+            hex: "#052F4A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.00784313725490196,
+              0.2901960784313726,
+              0.4392156862745098
+            ],
+            alpha: 1,
+            hex: "#024A70"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.34901960784313724,
+              0.5411764705882353
+            ],
+            alpha: 1,
+            hex: "#00598A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.4117647058823529,
+              0.6588235294117647
+            ],
+            alpha: 1,
+            hex: "#0069A8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.5176470588235295,
+              0.8196078431372549
+            ],
+            alpha: 1,
+            hex: "#0084D1"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.6509803921568628,
+              0.9568627450980393
+            ],
+            alpha: 1,
+            hex: "#00A6F4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0.7372549019607844,
+              1
+            ],
+            alpha: 1,
+            hex: "#00BCFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4549019607843137,
+              0.8313725490196079,
+              1
+            ],
+            alpha: 1,
+            hex: "#74D4FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7215686274509804,
+              0.9019607843137255,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#B8E6FE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8745098039215686,
+              0.9490196078431372,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#DFF2FE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-sky-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9411764705882353,
+              0.9764705882352941,
+              1
+            ],
+            alpha: 1,
+            hex: "#F0F9FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.08627450980392157,
+              0.1411764705882353,
+              0.33725490196078434
+            ],
+            alpha: 1,
+            hex: "#162456"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.10980392156862745,
+              0.2235294117647059,
+              0.5568627450980392
+            ],
+            alpha: 1,
+            hex: "#1C398E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.09803921568627451,
+              0.23529411764705882,
+              0.7215686274509804
+            ],
+            alpha: 1,
+            hex: "#193CB8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.0784313725490196,
+              0.2784313725490196,
+              0.9019607843137255
+            ],
+            alpha: 1,
+            hex: "#1447E6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.08235294117647059,
+              0.36470588235294116,
+              0.9882352941176471
+            ],
+            alpha: 1,
+            hex: "#155DFC"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.16862745098039217,
+              0.4980392156862745,
+              1
+            ],
+            alpha: 1,
+            hex: "#2B7FFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3176470588235294,
+              0.6352941176470588,
+              1
+            ],
+            alpha: 1,
+            hex: "#51A2FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5568627450980392,
+              0.7725490196078432,
+              1
+            ],
+            alpha: 1,
+            hex: "#8EC5FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7450980392156863,
+              0.8588235294117647,
+              1
+            ],
+            alpha: 1,
+            hex: "#BEDBFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8588235294117647,
+              0.9176470588235294,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#DBEAFE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-blue-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9372549019607843,
+              0.9647058823529412,
+              1
+            ],
+            alpha: 1,
+            hex: "#EFF6FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.11764705882352941,
+              0.10196078431372549,
+              0.30196078431372547
+            ],
+            alpha: 1,
+            hex: "#1E1A4D"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.19215686274509805,
+              0.17254901960784313,
+              0.5215686274509804
+            ],
+            alpha: 1,
+            hex: "#312C85"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.21568627450980393,
+              0.16470588235294117,
+              0.6745098039215687
+            ],
+            alpha: 1,
+            hex: "#372AAC"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.2627450980392157,
+              0.17647058823529413,
+              0.8431372549019608
+            ],
+            alpha: 1,
+            hex: "#432DD7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.30980392156862746,
+              0.2235294117647059,
+              0.9647058823529412
+            ],
+            alpha: 1,
+            hex: "#4F39F6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3803921568627451,
+              0.37254901960784315,
+              1
+            ],
+            alpha: 1,
+            hex: "#615FFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.48627450980392156,
+              0.5254901960784314,
+              1
+            ],
+            alpha: 1,
+            hex: "#7C86FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6392156862745098,
+              0.7019607843137254,
+              1
+            ],
+            alpha: 1,
+            hex: "#A3B3FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7764705882352941,
+              0.8235294117647058,
+              1
+            ],
+            alpha: 1,
+            hex: "#C6D2FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8784313725490196,
+              0.9058823529411765,
+              1
+            ],
+            alpha: 1,
+            hex: "#E0E7FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-indigo-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9333333333333333,
+              0.9490196078431372,
+              1
+            ],
+            alpha: 1,
+            hex: "#EEF2FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.1843137254901961,
+              0.050980392156862744,
+              0.40784313725490196
+            ],
+            alpha: 1,
+            hex: "#2F0D68"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.30196078431372547,
+              0.09019607843137255,
+              0.6039215686274509
+            ],
+            alpha: 1,
+            hex: "#4D179A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.36470588235294116,
+              0.054901960784313725,
+              0.7529411764705882
+            ],
+            alpha: 1,
+            hex: "#5D0EC0"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4392156862745098,
+              0.03137254901960784,
+              0.9058823529411765
+            ],
+            alpha: 1,
+            hex: "#7008E7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4980392156862745,
+              0.13333333333333333,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#7F22FE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5568627450980392,
+              0.3176470588235294,
+              1
+            ],
+            alpha: 1,
+            hex: "#8E51FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6509803921568628,
+              0.5176470588235295,
+              1
+            ],
+            alpha: 1,
+            hex: "#A684FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7686274509803922,
+              0.7058823529411765,
+              1
+            ],
+            alpha: 1,
+            hex: "#C4B4FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8666666666666667,
+              0.8392156862745098,
+              1
+            ],
+            alpha: 1,
+            hex: "#DDD6FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9294117647058824,
+              0.9137254901960784,
+              0.996078431372549
+            ],
+            alpha: 1,
+            hex: "#EDE9FE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-violet-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9607843137254902,
+              0.9529411764705882,
+              1
+            ],
+            alpha: 1,
+            hex: "#F5F3FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.23529411764705882,
+              0.011764705882352941,
+              0.4
+            ],
+            alpha: 1,
+            hex: "#3C0366"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.34901960784313724,
+              0.08627450980392157,
+              0.5450980392156862
+            ],
+            alpha: 1,
+            hex: "#59168B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.43137254901960786,
+              0.06666666666666667,
+              0.6901960784313725
+            ],
+            alpha: 1,
+            hex: "#6E11B0"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5098039215686274,
+              0,
+              0.8588235294117647
+            ],
+            alpha: 1,
+            hex: "#8200DB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.596078431372549,
+              0.06274509803921569,
+              0.9803921568627451
+            ],
+            alpha: 1,
+            hex: "#9810FA"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6784313725490196,
+              0.27450980392156865,
+              1
+            ],
+            alpha: 1,
+            hex: "#AD46FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7607843137254902,
+              0.47843137254901963,
+              1
+            ],
+            alpha: 1,
+            hex: "#C27AFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8549019607843137,
+              0.6980392156862745,
+              1
+            ],
+            alpha: 1,
+            hex: "#DAB2FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9137254901960784,
+              0.8313725490196079,
+              1
+            ],
+            alpha: 1,
+            hex: "#E9D4FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9529411764705882,
+              0.9098039215686274,
+              1
+            ],
+            alpha: 1,
+            hex: "#F3E8FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-purple-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9803921568627451,
+              0.9607843137254902,
+              1
+            ],
+            alpha: 1,
+            hex: "#FAF5FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.29411764705882354,
+              0,
+              0.30980392156862746
+            ],
+            alpha: 1,
+            hex: "#4B004F"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4470588235294118,
+              0.07450980392156863,
+              0.47058823529411764
+            ],
+            alpha: 1,
+            hex: "#721378"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5411764705882353,
+              0.00392156862745098,
+              0.5803921568627451
+            ],
+            alpha: 1,
+            hex: "#8A0194"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6588235294117647,
+              0,
+              0.7176470588235294
+            ],
+            alpha: 1,
+            hex: "#A800B7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7843137254901961,
+              0,
+              0.8705882352941177
+            ],
+            alpha: 1,
+            hex: "#C800DE"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8823529411764706,
+              0.16470588235294117,
+              0.984313725490196
+            ],
+            alpha: 1,
+            hex: "#E12AFB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9294117647058824,
+              0.41568627450980394,
+              1
+            ],
+            alpha: 1,
+            hex: "#ED6AFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9568627450980393,
+              0.6588235294117647,
+              1
+            ],
+            alpha: 1,
+            hex: "#F4A8FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9647058823529412,
+              0.8117647058823529,
+              1
+            ],
+            alpha: 1,
+            hex: "#F6CFFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9803921568627451,
+              0.9098039215686274,
+              1
+            ],
+            alpha: 1,
+            hex: "#FAE8FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-fuchsia-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9921568627450981,
+              0.9568627450980393,
+              1
+            ],
+            alpha: 1,
+            hex: "#FDF4FF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3176470588235294,
+              0.01568627450980392,
+              0.1411764705882353
+            ],
+            alpha: 1,
+            hex: "#510424"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5254901960784314,
+              0.06274509803921569,
+              0.2627450980392157
+            ],
+            alpha: 1,
+            hex: "#861043"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6392156862745098,
+              0,
+              0.2980392156862745
+            ],
+            alpha: 1,
+            hex: "#A3004C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7764705882352941,
+              0,
+              0.3607843137254902
+            ],
+            alpha: 1,
+            hex: "#C6005C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9019607843137255,
+              0,
+              0.4627450980392157
+            ],
+            alpha: 1,
+            hex: "#E60076"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9647058823529412,
+              0.2,
+              0.6039215686274509
+            ],
+            alpha: 1,
+            hex: "#F6339A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.984313725490196,
+              0.39215686274509803,
+              0.7137254901960784
+            ],
+            alpha: 1,
+            hex: "#FB64B6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9921568627450981,
+              0.6470588235294118,
+              0.8352941176470589
+            ],
+            alpha: 1,
+            hex: "#FDA5D5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9882352941176471,
+              0.807843137254902,
+              0.9098039215686274
+            ],
+            alpha: 1,
+            hex: "#FCCEE8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9882352941176471,
+              0.9058823529411765,
+              0.9529411764705882
+            ],
+            alpha: 1,
+            hex: "#FCE7F3"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-pink-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9921568627450981,
+              0.9490196078431372,
+              0.9725490196078431
+            ],
+            alpha: 1,
+            hex: "#FDF2F8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.30196078431372547,
+              0.00784313725490196,
+              0.09411764705882353
+            ],
+            alpha: 1,
+            hex: "#4D0218"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5450980392156862,
+              0.03137254901960784,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#8B0836"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6470588235294118,
+              0,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#A50036"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.7803921568627451,
+              0,
+              0.21176470588235294
+            ],
+            alpha: 1,
+            hex: "#C70036"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9254901960784314,
+              0,
+              0.24705882352941178
+            ],
+            alpha: 1,
+            hex: "#EC003F"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.12549019607843137,
+              0.33725490196078434
+            ],
+            alpha: 1,
+            hex: "#FF2056"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.38823529411764707,
+              0.49411764705882355
+            ],
+            alpha: 1,
+            hex: "#FF637E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.6313725490196078,
+              0.6784313725490196
+            ],
+            alpha: 1,
+            hex: "#FFA1AD"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8,
+              0.8274509803921568
+            ],
+            alpha: 1,
+            hex: "#FFCCD3"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.8941176470588236,
+              0.9019607843137255
+            ],
+            alpha: 1,
+            hex: "#FFE4E6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-rose-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              0.9450980392156862,
+              0.9490196078431372
+            ],
+            alpha: 1,
+            hex: "#FFF1F2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.00784313725490196,
+              0.023529411764705882,
+              0.09411764705882353
+            ],
+            alpha: 1,
+            hex: "#020618"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.058823529411764705,
+              0.09019607843137255,
+              0.16862745098039217
+            ],
+            alpha: 1,
+            hex: "#0F172B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.11372549019607843,
+              0.1607843137254902,
+              0.23921568627450981
+            ],
+            alpha: 1,
+            hex: "#1D293D"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.19215686274509805,
+              0.2549019607843137,
+              0.34509803921568627
+            ],
+            alpha: 1,
+            hex: "#314158"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.27058823529411763,
+              0.3333333333333333,
+              0.4235294117647059
+            ],
+            alpha: 1,
+            hex: "#45556C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3843137254901961,
+              0.4549019607843137,
+              0.5568627450980392
+            ],
+            alpha: 1,
+            hex: "#62748E"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.5647058823529412,
+              0.6313725490196078,
+              0.7254901960784313
+            ],
+            alpha: 1,
+            hex: "#90A1B9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.792156862745098,
+              0.8352941176470589,
+              0.8862745098039215
+            ],
+            alpha: 1,
+            hex: "#CAD5E2"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8862745098039215,
+              0.9098039215686274,
+              0.9411764705882353
+            ],
+            alpha: 1,
+            hex: "#E2E8F0"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9450980392156862,
+              0.9607843137254902,
+              0.9764705882352941
+            ],
+            alpha: 1,
+            hex: "#F1F5F9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-slate-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9725490196078431,
+              0.9803921568627451,
+              0.9882352941176471
+            ],
+            alpha: 1,
+            hex: "#F8FAFC"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.011764705882352941,
+              0.027450980392156862,
+              0.07058823529411765
+            ],
+            alpha: 1,
+            hex: "#030712"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.06274509803921569,
+              0.09411764705882353,
+              0.1568627450980392
+            ],
+            alpha: 1,
+            hex: "#101828"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.11764705882352941,
+              0.1607843137254902,
+              0.2235294117647059
+            ],
+            alpha: 1,
+            hex: "#1E2939"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.21176470588235294,
+              0.2549019607843137,
+              0.3254901960784314
+            ],
+            alpha: 1,
+            hex: "#364153"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.2901960784313726,
+              0.3333333333333333,
+              0.396078431372549
+            ],
+            alpha: 1,
+            hex: "#4A5565"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.41568627450980394,
+              0.4470588235294118,
+              0.5098039215686274
+            ],
+            alpha: 1,
+            hex: "#6A7282"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6,
+              0.6313725490196078,
+              0.6862745098039216
+            ],
+            alpha: 1,
+            hex: "#99A1AF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8196078431372549,
+              0.8352941176470589,
+              0.8627450980392157
+            ],
+            alpha: 1,
+            hex: "#D1D5DC"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8980392156862745,
+              0.9058823529411765,
+              0.9215686274509803
+            ],
+            alpha: 1,
+            hex: "#E5E7EB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9529411764705882,
+              0.9568627450980393,
+              0.9647058823529412
+            ],
+            alpha: 1,
+            hex: "#F3F4F6"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-gray-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9764705882352941,
+              0.9803921568627451,
+              0.984313725490196
+            ],
+            alpha: 1,
+            hex: "#F9FAFB"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.03529411764705882,
+              0.03529411764705882,
+              0.043137254901960784
+            ],
+            alpha: 1,
+            hex: "#09090B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.09411764705882353,
+              0.09411764705882353,
+              0.10588235294117647
+            ],
+            alpha: 1,
+            hex: "#18181B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.15294117647058825,
+              0.15294117647058825,
+              0.16470588235294117
+            ],
+            alpha: 1,
+            hex: "#27272A"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.24705882352941178,
+              0.24705882352941178,
+              0.27450980392156865
+            ],
+            alpha: 1,
+            hex: "#3F3F46"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3215686274509804,
+              0.3215686274509804,
+              0.3607843137254902
+            ],
+            alpha: 1,
+            hex: "#52525C"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.44313725490196076,
+              0.44313725490196076,
+              0.4823529411764706
+            ],
+            alpha: 1,
+            hex: "#71717B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6235294117647059,
+              0.6235294117647059,
+              0.6627450980392157
+            ],
+            alpha: 1,
+            hex: "#9F9FA9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8313725490196079,
+              0.8313725490196079,
+              0.8470588235294118
+            ],
+            alpha: 1,
+            hex: "#D4D4D8"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8941176470588236,
+              0.8941176470588236,
+              0.9058823529411765
+            ],
+            alpha: 1,
+            hex: "#E4E4E7"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9568627450980393,
+              0.9568627450980393,
+              0.9607843137254902
+            ],
+            alpha: 1,
+            hex: "#F4F4F5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-zinc-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9803921568627451,
+              0.9803921568627451,
+              0.9803921568627451
+            ],
+            alpha: 1,
+            hex: "#FAFAFA"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.08627450980392157,
+              0.08627450980392157,
+              0.08627450980392157
+            ],
+            alpha: 1,
+            hex: "#161616"
+          },
+          $extensions: {
+            "com.figma.variableId": "VariableID:1:4",
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.06666666666666667,
+              0.06666666666666667,
+              0.06666666666666667
+            ],
+            alpha: 1,
+            hex: "#111111"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.14901960784313725,
+              0.14901960784313725,
+              0.14901960784313725
+            ],
+            alpha: 1,
+            hex: "#262626"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.25098039215686274,
+              0.25098039215686274,
+              0.25098039215686274
+            ],
+            alpha: 1,
+            hex: "#404040"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3215686274509804,
+              0.3215686274509804,
+              0.3215686274509804
+            ],
+            alpha: 1,
+            hex: "#525252"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.45098039215686275,
+              0.45098039215686275,
+              0.45098039215686275
+            ],
+            alpha: 1,
+            hex: "#737373"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6313725490196078,
+              0.6313725490196078,
+              0.6313725490196078
+            ],
+            alpha: 1,
+            hex: "#A1A1A1"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8313725490196079,
+              0.8313725490196079,
+              0.8313725490196079
+            ],
+            alpha: 1,
+            hex: "#D4D4D4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8980392156862745,
+              0.8980392156862745,
+              0.8980392156862745
+            ],
+            alpha: 1,
+            hex: "#E5E5E5"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9490196078431372,
+              0.9490196078431372,
+              0.9490196078431372
+            ],
+            alpha: 1,
+            hex: "#F2F2F2"
+          },
+          $extensions: {
+            "com.figma.variableId": "VariableID:3:2",
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-neutral-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9764705882352941,
+              0.9764705882352941,
+              0.9764705882352941
+            ],
+            alpha: 1,
+            hex: "#F9F9F9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-50": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.047058823529411764,
+              0.0392156862745098,
+              0.03529411764705882
+            ],
+            alpha: 1,
+            hex: "#0C0A09"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-100": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.10980392156862745,
+              0.09803921568627451,
+              0.09019607843137255
+            ],
+            alpha: 1,
+            hex: "#1C1917"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-200": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.1607843137254902,
+              0.1450980392156863,
+              0.1411764705882353
+            ],
+            alpha: 1,
+            hex: "#292524"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-300": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.26666666666666666,
+              0.25098039215686274,
+              0.23137254901960785
+            ],
+            alpha: 1,
+            hex: "#44403B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-400": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.3411764705882353,
+              0.3254901960784314,
+              0.30196078431372547
+            ],
+            alpha: 1,
+            hex: "#57534D"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-500": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.4745098039215686,
+              0.44313725490196076,
+              0.4196078431372549
+            ],
+            alpha: 1,
+            hex: "#79716B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-600": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.6509803921568628,
+              0.6274509803921569,
+              0.6078431372549019
+            ],
+            alpha: 1,
+            hex: "#A6A09B"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-700": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.8392156862745098,
+              0.8274509803921568,
+              0.8196078431372549
+            ],
+            alpha: 1,
+            hex: "#D6D3D1"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-800": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9058823529411765,
+              0.8980392156862745,
+              0.8941176470588236
+            ],
+            alpha: 1,
+            hex: "#E7E5E4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-900": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9607843137254902,
+              0.9607843137254902,
+              0.9568627450980393
+            ],
+            alpha: 1,
+            hex: "#F5F5F4"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-stone-950": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0.9803921568627451,
+              0.9803921568627451,
+              0.9764705882352941
+            ],
+            alpha: 1,
+            hex: "#FAFAF9"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-white": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "fill-black": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              1,
+              1,
+              1
+            ],
+            alpha: 1,
+            hex: "#FFFFFF"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "ALL_FILLS",
+              "STROKE_COLOR",
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        $extensions: {
+          "com.figma.modeName": "Dark"
+        }
+      }
+    },
+    units: {
+      Default: {
+        "spacing-0": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-px": {
+          $type: "number",
+          $value: 1,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-0p5": {
+          $type: "number",
+          $value: 2,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-1": {
+          $type: "number",
+          $value: 4,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-1p5": {
+          $type: "number",
+          $value: 6,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-2": {
+          $type: "number",
+          $value: 8,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-2p5": {
+          $type: "number",
+          $value: 10,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-3": {
+          $type: "number",
+          $value: 12,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-3p5": {
+          $type: "number",
+          $value: 14,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-4": {
+          $type: "number",
+          $value: 16,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-5": {
+          $type: "number",
+          $value: 20,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-6": {
+          $type: "number",
+          $value: 24,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-7": {
+          $type: "number",
+          $value: 28,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-8": {
+          $type: "number",
+          $value: 32,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-9": {
+          $type: "number",
+          $value: 36,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-10": {
+          $type: "number",
+          $value: 40,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-11": {
+          $type: "number",
+          $value: 44,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-12": {
+          $type: "number",
+          $value: 48,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-14": {
+          $type: "number",
+          $value: 56,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-16": {
+          $type: "number",
+          $value: 64,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-20": {
+          $type: "number",
+          $value: 80,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-24": {
+          $type: "number",
+          $value: 96,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-28": {
+          $type: "number",
+          $value: 112,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-32": {
+          $type: "number",
+          $value: 128,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-36": {
+          $type: "number",
+          $value: 144,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-40": {
+          $type: "number",
+          $value: 160,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-44": {
+          $type: "number",
+          $value: 176,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-48": {
+          $type: "number",
+          $value: 192,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-52": {
+          $type: "number",
+          $value: 208,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-56": {
+          $type: "number",
+          $value: 224,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-60": {
+          $type: "number",
+          $value: 240,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-64": {
+          $type: "number",
+          $value: 256,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-72": {
+          $type: "number",
+          $value: 288,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-80": {
+          $type: "number",
+          $value: 320,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-96": {
+          $type: "number",
+          $value: 384,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "spacing-full": {
+          $type: "number",
+          $value: 999,
+          $extensions: {
+            "com.figma.scopes": [
+              "WIDTH_HEIGHT",
+              "GAP"
+            ]
+          }
+        },
+        "radius-none": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-xs": {
+          $type: "number",
+          $value: 2,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-sm": {
+          $type: "number",
+          $value: 4,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-md": {
+          $type: "number",
+          $value: 6,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-lg": {
+          $type: "number",
+          $value: 8,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-xl": {
+          $type: "number",
+          $value: 12,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-2xl": {
+          $type: "number",
+          $value: 16,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-3xl": {
+          $type: "number",
+          $value: 24,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-4xl": {
+          $type: "number",
+          $value: 32,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        "radius-full": {
+          $type: "number",
+          $value: 999,
+          $extensions: {
+            "com.figma.scopes": [
+              "CORNER_RADIUS"
+            ]
+          }
+        },
+        $extensions: {
+          "com.figma.modeName": "Default"
+        }
+      }
+    },
+    typography: {
+      Default: {
+        "font-size-xs": {
+          $type: "number",
+          $value: 12,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-sm": {
+          $type: "number",
+          $value: 14,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-base": {
+          $type: "number",
+          $value: 16,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-lg": {
+          $type: "number",
+          $value: 18,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-xl": {
+          $type: "number",
+          $value: 20,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-2xl": {
+          $type: "number",
+          $value: 24,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-3xl": {
+          $type: "number",
+          $value: 30,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-4xl": {
+          $type: "number",
+          $value: 36,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-5xl": {
+          $type: "number",
+          $value: 48,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-6xl": {
+          $type: "number",
+          $value: 60,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-7xl": {
+          $type: "number",
+          $value: 72,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-8xl": {
+          $type: "number",
+          $value: 96,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "font-size-9xl": {
+          $type: "number",
+          $value: 128,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_SIZE"
+            ]
+          }
+        },
+        "line-height-xs": {
+          $type: "number",
+          $value: 16,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-sm": {
+          $type: "number",
+          $value: 20,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-base": {
+          $type: "number",
+          $value: 24,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-lg": {
+          $type: "number",
+          $value: 28,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-xl": {
+          $type: "number",
+          $value: 28,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-2xl": {
+          $type: "number",
+          $value: 32,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-3xl": {
+          $type: "number",
+          $value: 36,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-4xl": {
+          $type: "number",
+          $value: 40,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-5xl": {
+          $type: "number",
+          $value: 48,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-6xl": {
+          $type: "number",
+          $value: 60,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-7xl": {
+          $type: "number",
+          $value: 72,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-8xl": {
+          $type: "number",
+          $value: 96,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "line-height-9xl": {
+          $type: "number",
+          $value: 128,
+          $extensions: {
+            "com.figma.scopes": [
+              "LINE_HEIGHT"
+            ]
+          }
+        },
+        "font-weight-thin": {
+          $type: "number",
+          $value: 100,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        "font-weight-extralight": {
+          $type: "number",
+          $value: 200,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        "font-weight-light": {
+          $type: "number",
+          $value: 300,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        "font-weight-normal": {
+          $type: "number",
+          $value: 400,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        "font-weight-medium": {
+          $type: "number",
+          $value: 500,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        "font-weight-semibold": {
+          $type: "number",
+          $value: 600,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        "font-weight-bold": {
+          $type: "number",
+          $value: 700,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        "font-weight-extrabold": {
+          $type: "number",
+          $value: 800,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        "font-weight-black": {
+          $type: "number",
+          $value: 900,
+          $extensions: {
+            "com.figma.scopes": [
+              "FONT_WEIGHT"
+            ]
+          }
+        },
+        $extensions: {
+          "com.figma.modeName": "Default"
+        }
+      }
+    },
+    shadows: {
+      Default: {
+        "shadow-2xs-1-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-2xs-1-offset-y": {
+          $type: "number",
+          $value: 1,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-2xs-1-blur": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-2xs-1-spread": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-2xs-1-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.05,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-xs-1-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xs-1-offset-y": {
+          $type: "number",
+          $value: 1,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xs-1-blur": {
+          $type: "number",
+          $value: 2,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xs-1-spread": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xs-1-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.05,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-sm-1-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-sm-1-offset-y": {
+          $type: "number",
+          $value: 1,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-sm-1-blur": {
+          $type: "number",
+          $value: 3,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-sm-1-spread": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-sm-1-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-sm-2-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-sm-2-offset-y": {
+          $type: "number",
+          $value: 1,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-sm-2-blur": {
+          $type: "number",
+          $value: 2,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-sm-2-spread": {
+          $type: "number",
+          $value: -1,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-sm-2-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-md-1-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-md-1-offset-y": {
+          $type: "number",
+          $value: 4,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-md-1-blur": {
+          $type: "number",
+          $value: 6,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-md-1-spread": {
+          $type: "number",
+          $value: -1,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-md-1-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-md-2-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-md-2-offset-y": {
+          $type: "number",
+          $value: 2,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-md-2-blur": {
+          $type: "number",
+          $value: 4,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-md-2-spread": {
+          $type: "number",
+          $value: -2,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-md-2-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-lg-1-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-lg-1-offset-y": {
+          $type: "number",
+          $value: 10,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-lg-1-blur": {
+          $type: "number",
+          $value: 15,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-lg-1-spread": {
+          $type: "number",
+          $value: -3,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-lg-1-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-lg-2-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-lg-2-offset-y": {
+          $type: "number",
+          $value: 4,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-lg-2-blur": {
+          $type: "number",
+          $value: 6,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-lg-2-spread": {
+          $type: "number",
+          $value: -4,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-lg-2-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-xl-1-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xl-1-offset-y": {
+          $type: "number",
+          $value: 20,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xl-1-blur": {
+          $type: "number",
+          $value: 25,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xl-1-spread": {
+          $type: "number",
+          $value: -5,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xl-1-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-xl-2-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xl-2-offset-y": {
+          $type: "number",
+          $value: 8,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xl-2-blur": {
+          $type: "number",
+          $value: 10,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xl-2-spread": {
+          $type: "number",
+          $value: -6,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-xl-2-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.1,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        "shadow-2xl-1-offset-x": {
+          $type: "number",
+          $value: 0,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-2xl-1-offset-y": {
+          $type: "number",
+          $value: 25,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-2xl-1-blur": {
+          $type: "number",
+          $value: 50,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-2xl-1-spread": {
+          $type: "number",
+          $value: -12,
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_FLOAT"
+            ]
+          }
+        },
+        "shadow-2xl-1-color": {
+          $type: "color",
+          $value: {
+            colorSpace: "srgb",
+            components: [
+              0,
+              0,
+              0
+            ],
+            alpha: 0.25,
+            hex: "#000000"
+          },
+          $extensions: {
+            "com.figma.scopes": [
+              "EFFECT_COLOR"
+            ]
+          }
+        },
+        $extensions: {
+          "com.figma.modeName": "Default"
+        }
+      }
+    }
+  };
+
   // unison-components/src/constants/colors.ts
-  var COLORS = {
+  var UNISON_COLORS = {
     currentcolor: "currentColor",
     transparent: "transparent",
     black: "#000000",
@@ -249,6 +11680,18 @@
       50: "#FFFFFF"
     }
   };
+  var TAILWIND_COLORS = (() => {
+    var _a, _b;
+    const palette = {};
+    for (const [name, token] of Object.entries(tokens_default.colors.Light)) {
+      const [, hue, shade] = (_a = name.match(/^fill-([a-z]+)-(\d+)$/)) != null ? _a : [];
+      if (!hue || hue === "neutral" || !("$value" in token)) continue;
+      (_b = palette[hue]) != null ? _b : palette[hue] = {};
+      palette[hue][shade] = token.$value.hex;
+    }
+    return palette;
+  })();
+  var COLORS = __spreadValues(__spreadValues({}, UNISON_COLORS), TAILWIND_COLORS);
 
   // unison-components/src/constants/units.ts
   var UNITS = {
@@ -446,6 +11889,49 @@
   var STRING_PROP_KEYS = {
     Vector: ["path", "viewBox", "fillRule"]
   };
+  var PANEL_ORDER = [
+    "autolayout-",
+    "wrap",
+    "width-",
+    "height-",
+    "alignment-",
+    "gap-",
+    "padding-",
+    "padding-horizontal-",
+    "padding-vertical-",
+    "padding-left-",
+    "padding-top-",
+    "padding-right-",
+    "padding-bottom-",
+    "corner-radius-",
+    "corner-radius-top-left-",
+    "corner-radius-top-right-",
+    "corner-radius-bottom-right-",
+    "corner-radius-bottom-left-",
+    "border-radius-",
+    "typography-",
+    "typography-align-",
+    "typography-decoration-",
+    "fill-",
+    "fill-hover-",
+    "stroke-",
+    "stroke-weight-",
+    "stroke-style-",
+    "stroke-hover-",
+    "effect-"
+  ];
+  var _panelRank = (flag) => {
+    let rank = PANEL_ORDER.length;
+    let length = 0;
+    for (const [i, prefix] of PANEL_ORDER.entries()) {
+      if (flag.startsWith(prefix) && prefix.length > length) {
+        rank = i;
+        length = prefix.length;
+      }
+    }
+    return rank;
+  };
+  var _byPanelOrder = (a, b) => _panelRank(a) - _panelRank(b) || a.localeCompare(b);
   var SKIP_WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
   var _booleanPropKeys = (properties) => Object.keys(properties).filter((k) => !META_KEYS.has(k) && !k.startsWith("OVERRIDE_") && properties[k] === true);
   var _openTagPropKeys = (tag, properties) => {
@@ -463,7 +11949,7 @@
   };
   var _formatOpenTag = (tag, properties, indentation, selfClosing) => {
     var _a;
-    const flags = _openTagPropKeys(tag, properties).sort((a, b) => a.localeCompare(b));
+    const flags = _openTagPropKeys(tag, properties).sort(_byPanelOrder);
     const attributes = ((_a = STRING_PROP_KEYS[tag]) != null ? _a : []).filter((k) => typeof properties[k] === "string").map((k) => "".concat(k, '="').concat(properties[k], '"'));
     const keys = [...flags, ...attributes];
     if (keys.length === 0) {
@@ -560,7 +12046,7 @@
       addHexOwner(hex, "".concat(name, "-").concat(shade));
       paletteHexes.add(hex);
     }
-    if (isRgbHex(value.brand) && !paletteHexes.has(value.brand)) {
+    if ("brand" in value && isRgbHex(value.brand) && !paletteHexes.has(value.brand)) {
       addHexOwner(value.brand, "".concat(name, "-brand"));
     }
   }
@@ -942,11 +12428,6 @@
     const errors = [];
     if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
       properties[mapFrame["".concat(node.layoutMode, "_").concat(node.primaryAxisAlignItems, "_").concat(node.counterAxisAlignItems)]] = true;
-    } else {
-      errors.push({
-        nodeId: node.id,
-        message: "Error @ ".concat(node.name, ' \u2013 ALIGNMENT mode must be "horizontal" or "vertical".')
-      });
     }
     return { properties, errors, warnings: [] };
   };
@@ -1138,20 +12619,20 @@
 
   // src/read/layout.ts
   var map = {
-    HORIZONTAL: "flow-horizontal",
-    VERTICAL: "flow-vertical",
-    GRID: "flow-grid"
+    HORIZONTAL: "autolayout-horizontal",
+    VERTICAL: "autolayout-vertical"
   };
   var readLayout = (node) => {
     const properties = {};
     const errors = [];
-    if (node.layoutMode === "NONE") {
+    const flag = map[node.layoutMode];
+    if (!flag) {
       errors.push({
         nodeId: node.id,
-        message: "Error @ ".concat(node.name, ' \u2013 LAYOUT value must be "horizontal", "vertical" or "grid".')
+        message: "Error @ ".concat(node.name, " \u2013 FRAME has no auto layout.")
       });
     } else {
-      properties[map[node.layoutMode]] = true;
+      properties[flag] = true;
       if (node.layoutMode === "HORIZONTAL" && node.layoutWrap === "WRAP") {
         properties.wrap = true;
       }
@@ -1328,7 +12809,7 @@
   var serializeGroup = (node) => {
     return {
       properties: __spreadProps(__spreadValues({}, readIdentity(node)), {
-        "flow-vertical": true,
+        "autolayout-vertical": true,
         "width-fill": true,
         "height-fill": true,
         "alignment-top-left": true,
@@ -1338,7 +12819,7 @@
       warnings: [
         {
           nodeId: node.id,
-          message: 'Notice @ "'.concat(node.name, '" \u2013 GROUP layers are automatically converted into frames. Consider using a frame instead.')
+          message: 'Notice @ "'.concat(node.name, '" \u2013 GROUP converted to frame.')
         }
       ]
     };
@@ -1359,6 +12840,7 @@
 
   // src/read/typography.ts
   var readTypography = async (node) => {
+    var _a;
     const properties = {};
     const errors = [];
     if (node.textStyleId === void 0) {
@@ -1374,7 +12856,8 @@
     } else {
       const textStyle = await figma.getStyleByIdAsync(node.textStyleId);
       if (textStyle) {
-        properties["typography-".concat(textStyle.name)] = true;
+        const size = (_a = textStyle.name.match(/^text-(.+)$/)) == null ? void 0 : _a[1];
+        properties["typography-".concat(size != null ? size : textStyle.name)] = true;
       }
     }
     return { properties, errors, warnings: [] };
@@ -1410,7 +12893,8 @@
       properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), alignment.properties), cornerRadius.properties), dimensions.properties), fill.properties), gap.properties), layout.properties), padding.properties), stroke.properties), {
         children: "children" in node ? node.children : []
       }),
-      errors: [],
+      // Components, instances and other frame-like layers need auto layout too (reported by readLayout).
+      errors: "layoutMode" in node ? layout.errors : [],
       warnings: [
         {
           nodeId: node.id,
@@ -1610,9 +13094,23 @@
   };
   recordSelection();
   figma.ui.onmessage = async (msg) => {
-    var _a;
+    var _a, _b;
     if (msg.type === "toggleOutput") {
       showOutput = (_a = msg.showOutput) != null ? _a : true;
+      runner();
+      return;
+    }
+    if (msg.type === "import") {
+      const messages = [];
+      try {
+        messages.push(await importVariables(msg.tokens));
+        messages.push(await createShadowStyles());
+        messages.push(await createTextStyles());
+        figma.notify(messages.join(" "), { timeout: 6e3 });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        figma.notify("".concat(messages.join(" "), " Import failed: ").concat(reason).trim(), { error: true, timeout: 1e4 });
+      }
       runner();
       return;
     }
@@ -1635,15 +13133,25 @@
     }
     const id = msg.selectNode;
     if (!id || id === "") return;
+    const alreadySelected = ((_b = figma.currentPage.selection[0]) == null ? void 0 : _b.id) === id;
     await focusNode(id);
+    if (alreadySelected) {
+      runner();
+    }
   };
+  var latestRun = 0;
   var runner = async () => {
+    const run = ++latestRun;
     figma.ui.postMessage({ loading: true });
-    const selection = figma.currentPage.selection;
-    if (selection.length > 0) {
+    const node = figma.currentPage.selection[0];
+    if (!node) {
+      figma.ui.postMessage({ output: placeholder, warnings: [], errors: [] });
+      return;
+    }
+    try {
       const warnings = [];
       const errors = [];
-      const json = await serializeNode(figma.currentPage.selection[0]);
+      const json = await serializeNode(node);
       const collectMessages = (p) => {
         if (p.warnings.length > 0) {
           warnings.push(...p.warnings);
@@ -1659,16 +13167,16 @@
         }
       };
       collectMessages(json);
+      const output = showOutput ? renderComponentCode(json) : "";
+      if (run !== latestRun) return;
+      figma.ui.postMessage({ output, warnings, errors });
+    } catch (error) {
+      if (run !== latestRun) return;
+      const reason = error instanceof Error ? error.message : String(error);
       figma.ui.postMessage({
-        output: showOutput ? renderComponentCode(json) : "",
-        warnings,
-        errors
-      });
-    } else {
-      figma.ui.postMessage({
-        output: placeholder,
+        output: "",
         warnings: [],
-        errors: []
+        errors: [{ nodeId: node.id, message: "Error @ ".concat(node.name, " \u2013 ").concat(reason) }]
       });
     }
   };

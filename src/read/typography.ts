@@ -34,7 +34,10 @@ export const readTypography = async (node: TextNode): Promise<PropertiesErrorOrW
     const textStyle = await figma.getStyleByIdAsync(node.textStyleId)
 
     if (textStyle) {
-      properties[`typography-${textStyle.name}`] = true
+      // `text-<size>` styles (made by the import button) are Tailwind's sizes: `typography-sm`.
+      const size = textStyle.name.match(/^text-(.+)$/)?.[1]
+
+      properties[`typography-${size ?? textStyle.name}`] = true
     }
   }
 

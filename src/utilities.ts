@@ -22,6 +22,59 @@ const STRING_PROP_KEYS: Record<string, string[]> = {
   Vector: ["path", "viewBox", "fillRule"],
 }
 
+/**
+ * Flag prefixes in the order their settings appear in Figma's right panel: layout (direction, size, alignment, gap,
+ * padding), appearance (corner radius), typography, fill, stroke, effects. A flag ranks by its longest matching prefix;
+ * flags of the same rank sort alphabetically, and unknown flags go last.
+ */
+const PANEL_ORDER = [
+  "autolayout-",
+  "wrap",
+  "width-",
+  "height-",
+  "alignment-",
+  "gap-",
+  "padding-",
+  "padding-horizontal-",
+  "padding-vertical-",
+  "padding-left-",
+  "padding-top-",
+  "padding-right-",
+  "padding-bottom-",
+  "corner-radius-",
+  "corner-radius-top-left-",
+  "corner-radius-top-right-",
+  "corner-radius-bottom-right-",
+  "corner-radius-bottom-left-",
+  "border-radius-",
+  "typography-",
+  "typography-align-",
+  "typography-decoration-",
+  "fill-",
+  "fill-hover-",
+  "stroke-",
+  "stroke-weight-",
+  "stroke-style-",
+  "stroke-hover-",
+  "effect-",
+]
+
+const _panelRank = (flag: string): number => {
+  let rank = PANEL_ORDER.length
+  let length = 0
+
+  for (const [i, prefix] of PANEL_ORDER.entries()) {
+    if (flag.startsWith(prefix) && prefix.length > length) {
+      rank = i
+      length = prefix.length
+    }
+  }
+
+  return rank
+}
+
+const _byPanelOrder = (a: string, b: string): number => _panelRank(a) - _panelRank(b) || a.localeCompare(b)
+
 const SKIP_WRAPPER_TYPES = new Set(["INSTANCE", "COMPONENT", "SLOT"])
 
 const _booleanPropKeys = (properties: Record<string, unknown>): string[] =>
@@ -48,7 +101,7 @@ const _formatOpenTag = (
   indentation: string,
   selfClosing: boolean,
 ): string => {
-  const flags = _openTagPropKeys(tag, properties).sort((a, b) => a.localeCompare(b))
+  const flags = _openTagPropKeys(tag, properties).sort(_byPanelOrder)
   const attributes = (STRING_PROP_KEYS[tag] ?? [])
     .filter((k) => typeof properties[k] === "string")
     .map((k) => `${k}="${properties[k]}"`)

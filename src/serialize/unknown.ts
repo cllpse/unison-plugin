@@ -37,7 +37,8 @@ export const serializeUnknown = async (
       children: "children" in node ? node.children : [],
     },
 
-    errors: [],
+    // Components, instances and other frame-like layers need auto layout too (reported by readLayout).
+    errors: "layoutMode" in node ? layout.errors : [],
     warnings: [
       {
         nodeId: node.id,
