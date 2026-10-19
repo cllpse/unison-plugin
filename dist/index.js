@@ -76,7 +76,7 @@
     return effect;
   };
   var createShadowStyles = async () => {
-    var _a, _b;
+    var _a3, _b;
     if (figma.editorType !== "figma") {
       return "Shadow styles need the Figma editor.";
     }
@@ -85,7 +85,7 @@
       const match = variable.name.match(SHADOW_VARIABLE);
       if (!match) continue;
       const [, name, index, field] = match;
-      const layers = (_a = shadows.get(name)) != null ? _a : /* @__PURE__ */ new Map();
+      const layers = (_a3 = shadows.get(name)) != null ? _a3 : /* @__PURE__ */ new Map();
       const layer = (_b = layers.get(Number(index))) != null ? _b : {};
       layer[field] = variable;
       layers.set(Number(index), layer);
@@ -123,7 +123,7 @@
   var TYPOGRAPHY_VARIABLE = /^(font-size|line-height)-(.+)$/;
   var DEFAULT_FONT = { family: "Inter", style: "Regular" };
   var createTextStyles = async () => {
-    var _a, _b;
+    var _a3, _b;
     if (figma.editorType !== "figma") {
       return "Text styles need the Figma editor.";
     }
@@ -132,7 +132,7 @@
       const match = variable.name.match(TYPOGRAPHY_VARIABLE);
       if (!match) continue;
       const [, field, name] = match;
-      const size = (_a = sizes.get(name)) != null ? _a : {};
+      const size = (_a3 = sizes.get(name)) != null ? _a3 : {};
       size[field] = variable;
       sizes.set(name, size);
     }
@@ -196,11 +196,11 @@
     const children = [...group].filter(([key, node]) => !key.startsWith("$") && node instanceof Map);
     const scales = [...new Set(children.map(([key]) => scaleOf(key)))];
     const numberScales = new Set(
-      scales.filter((scale2) => children.every(([key, node]) => scaleOf(key) !== scale2 || isNumberToken(node)))
+      scales.filter((scale) => children.every(([key, node]) => scaleOf(key) !== scale || isNumberToken(node)))
     );
     children.sort(([keyA, a], [keyB, b]) => {
-      const scale2 = scales.indexOf(scaleOf(keyA)) - scales.indexOf(scaleOf(keyB));
-      if (scale2 !== 0 || !numberScales.has(scaleOf(keyA))) return scale2;
+      const scale = scales.indexOf(scaleOf(keyA)) - scales.indexOf(scaleOf(keyB));
+      if (scale !== 0 || !numberScales.has(scaleOf(keyA))) return scale;
       return Number(a.get("$value")) - Number(b.get("$value"));
     });
     for (const [key, node] of children) {
@@ -226,7 +226,7 @@
     return typeof name === "string" ? name : "Default";
   };
   var importVariables = async (text) => {
-    var _a, _b, _c, _d, _e, _f;
+    var _a3, _b, _c, _d, _e, _f;
     if (figma.editorType !== "figma") {
       return "Variables need the Figma editor.";
     }
@@ -251,7 +251,7 @@
     let created = 0;
     let updated = 0;
     for (const { name, modes } of collectionsInFile) {
-      const collection = (_b = (_a = collections.find((existing) => existing.name === name)) != null ? _a : collections.find((existing) => canonicalName(existing.name) === canonicalName(name))) != null ? _b : figma.variables.createVariableCollection(name);
+      const collection = (_b = (_a3 = collections.find((existing) => existing.name === name)) != null ? _a3 : collections.find((existing) => canonicalName(existing.name) === canonicalName(name))) != null ? _b : figma.variables.createVariableCollection(name);
       collection.name = name;
       const modeIds = modes.map((mode, i) => {
         const existing = collection.modes.find((m) => m.name === modeName(mode));
@@ -379,708 +379,443 @@
   };
 
   // unison-components/dist/tokens.ts
-  var TOKENS = {
-    colors: {
-      Light: {
-        "fill-red-50": "#FEF2F2",
-        "fill-red-100": "#FFE2E2",
-        "fill-red-200": "#FFC9C9",
-        "fill-red-300": "#FFA2A2",
-        "fill-red-400": "#FF6467",
-        "fill-red-500": "#FB2C36",
-        "fill-red-600": "#E7000B",
-        "fill-red-700": "#C10007",
-        "fill-red-800": "#9F0712",
-        "fill-red-900": "#82181A",
-        "fill-red-950": "#460809",
-        "fill-orange-50": "#FFF7ED",
-        "fill-orange-100": "#FFEDD4",
-        "fill-orange-200": "#FFD6A7",
-        "fill-orange-300": "#FFB86A",
-        "fill-orange-400": "#FF8904",
-        "fill-orange-500": "#FF6900",
-        "fill-orange-600": "#F54900",
-        "fill-orange-700": "#CA3500",
-        "fill-orange-800": "#9F2D00",
-        "fill-orange-900": "#7E2A0C",
-        "fill-orange-950": "#441306",
-        "fill-amber-50": "#FFFBEB",
-        "fill-amber-100": "#FEF3C6",
-        "fill-amber-200": "#FEE685",
-        "fill-amber-300": "#FFD230",
-        "fill-amber-400": "#FFB900",
-        "fill-amber-500": "#FE9A00",
-        "fill-amber-600": "#E17100",
-        "fill-amber-700": "#BB4D00",
-        "fill-amber-800": "#973C00",
-        "fill-amber-900": "#7B3306",
-        "fill-amber-950": "#461901",
-        "fill-yellow-50": "#FEFCE8",
-        "fill-yellow-100": "#FEF9C2",
-        "fill-yellow-200": "#FFF085",
-        "fill-yellow-300": "#FFDF20",
-        "fill-yellow-400": "#FDC700",
-        "fill-yellow-500": "#F0B100",
-        "fill-yellow-600": "#D08700",
-        "fill-yellow-700": "#A65F00",
-        "fill-yellow-800": "#894B00",
-        "fill-yellow-900": "#733E0A",
-        "fill-yellow-950": "#432004",
-        "fill-lime-50": "#F7FEE7",
-        "fill-lime-100": "#ECFCCA",
-        "fill-lime-200": "#D8F999",
-        "fill-lime-300": "#BBF451",
-        "fill-lime-400": "#9AE600",
-        "fill-lime-500": "#7CCF00",
-        "fill-lime-600": "#5EA500",
-        "fill-lime-700": "#497D00",
-        "fill-lime-800": "#3C6300",
-        "fill-lime-900": "#35530E",
-        "fill-lime-950": "#192E03",
-        "fill-green-50": "#F0FDF4",
-        "fill-green-100": "#DCFCE7",
-        "fill-green-200": "#B9F8CF",
-        "fill-green-300": "#7BF1A8",
-        "fill-green-400": "#05DF72",
-        "fill-green-500": "#00C950",
-        "fill-green-600": "#00A63E",
-        "fill-green-700": "#008236",
-        "fill-green-800": "#016630",
-        "fill-green-900": "#0D542B",
-        "fill-green-950": "#032E15",
-        "fill-emerald-50": "#ECFDF5",
-        "fill-emerald-100": "#D0FAE5",
-        "fill-emerald-200": "#A4F4CF",
-        "fill-emerald-300": "#5EE9B5",
-        "fill-emerald-400": "#00D492",
-        "fill-emerald-500": "#00BC7D",
-        "fill-emerald-600": "#009966",
-        "fill-emerald-700": "#007A55",
-        "fill-emerald-800": "#006045",
-        "fill-emerald-900": "#004F3B",
-        "fill-emerald-950": "#002C22",
-        "fill-teal-50": "#F0FDFA",
-        "fill-teal-100": "#CBFBF1",
-        "fill-teal-200": "#96F7E4",
-        "fill-teal-300": "#46ECD5",
-        "fill-teal-400": "#00D5BE",
-        "fill-teal-500": "#00BBA7",
-        "fill-teal-600": "#009689",
-        "fill-teal-700": "#00786F",
-        "fill-teal-800": "#005F5A",
-        "fill-teal-900": "#0B4F4A",
-        "fill-teal-950": "#022F2E",
-        "fill-cyan-50": "#ECFEFF",
-        "fill-cyan-100": "#CEFAFE",
-        "fill-cyan-200": "#A2F4FD",
-        "fill-cyan-300": "#53EAFD",
-        "fill-cyan-400": "#00D3F2",
-        "fill-cyan-500": "#00B8DB",
-        "fill-cyan-600": "#0092B8",
-        "fill-cyan-700": "#007595",
-        "fill-cyan-800": "#005F78",
-        "fill-cyan-900": "#104E64",
-        "fill-cyan-950": "#053345",
-        "fill-sky-50": "#F0F9FF",
-        "fill-sky-100": "#DFF2FE",
-        "fill-sky-200": "#B8E6FE",
-        "fill-sky-300": "#74D4FF",
-        "fill-sky-400": "#00BCFF",
-        "fill-sky-500": "#00A6F4",
-        "fill-sky-600": "#0084D1",
-        "fill-sky-700": "#0069A8",
-        "fill-sky-800": "#00598A",
-        "fill-sky-900": "#024A70",
-        "fill-sky-950": "#052F4A",
-        "fill-blue-50": "#EFF6FF",
-        "fill-blue-100": "#DBEAFE",
-        "fill-blue-200": "#BEDBFF",
-        "fill-blue-300": "#8EC5FF",
-        "fill-blue-400": "#51A2FF",
-        "fill-blue-500": "#2B7FFF",
-        "fill-blue-600": "#155DFC",
-        "fill-blue-700": "#1447E6",
-        "fill-blue-800": "#193CB8",
-        "fill-blue-900": "#1C398E",
-        "fill-blue-950": "#162456",
-        "fill-indigo-50": "#EEF2FF",
-        "fill-indigo-100": "#E0E7FF",
-        "fill-indigo-200": "#C6D2FF",
-        "fill-indigo-300": "#A3B3FF",
-        "fill-indigo-400": "#7C86FF",
-        "fill-indigo-500": "#615FFF",
-        "fill-indigo-600": "#4F39F6",
-        "fill-indigo-700": "#432DD7",
-        "fill-indigo-800": "#372AAC",
-        "fill-indigo-900": "#312C85",
-        "fill-indigo-950": "#1E1A4D",
-        "fill-violet-50": "#F5F3FF",
-        "fill-violet-100": "#EDE9FE",
-        "fill-violet-200": "#DDD6FF",
-        "fill-violet-300": "#C4B4FF",
-        "fill-violet-400": "#A684FF",
-        "fill-violet-500": "#8E51FF",
-        "fill-violet-600": "#7F22FE",
-        "fill-violet-700": "#7008E7",
-        "fill-violet-800": "#5D0EC0",
-        "fill-violet-900": "#4D179A",
-        "fill-violet-950": "#2F0D68",
-        "fill-purple-50": "#FAF5FF",
-        "fill-purple-100": "#F3E8FF",
-        "fill-purple-200": "#E9D4FF",
-        "fill-purple-300": "#DAB2FF",
-        "fill-purple-400": "#C27AFF",
-        "fill-purple-500": "#AD46FF",
-        "fill-purple-600": "#9810FA",
-        "fill-purple-700": "#8200DB",
-        "fill-purple-800": "#6E11B0",
-        "fill-purple-900": "#59168B",
-        "fill-purple-950": "#3C0366",
-        "fill-fuchsia-50": "#FDF4FF",
-        "fill-fuchsia-100": "#FAE8FF",
-        "fill-fuchsia-200": "#F6CFFF",
-        "fill-fuchsia-300": "#F4A8FF",
-        "fill-fuchsia-400": "#ED6AFF",
-        "fill-fuchsia-500": "#E12AFB",
-        "fill-fuchsia-600": "#C800DE",
-        "fill-fuchsia-700": "#A800B7",
-        "fill-fuchsia-800": "#8A0194",
-        "fill-fuchsia-900": "#721378",
-        "fill-fuchsia-950": "#4B004F",
-        "fill-pink-50": "#FDF2F8",
-        "fill-pink-100": "#FCE7F3",
-        "fill-pink-200": "#FCCEE8",
-        "fill-pink-300": "#FDA5D5",
-        "fill-pink-400": "#FB64B6",
-        "fill-pink-500": "#F6339A",
-        "fill-pink-600": "#E60076",
-        "fill-pink-700": "#C6005C",
-        "fill-pink-800": "#A3004C",
-        "fill-pink-900": "#861043",
-        "fill-pink-950": "#510424",
-        "fill-rose-50": "#FFF1F2",
-        "fill-rose-100": "#FFE4E6",
-        "fill-rose-200": "#FFCCD3",
-        "fill-rose-300": "#FFA1AD",
-        "fill-rose-400": "#FF637E",
-        "fill-rose-500": "#FF2056",
-        "fill-rose-600": "#EC003F",
-        "fill-rose-700": "#C70036",
-        "fill-rose-800": "#A50036",
-        "fill-rose-900": "#8B0836",
-        "fill-rose-950": "#4D0218",
-        "fill-slate-50": "#F8FAFC",
-        "fill-slate-100": "#F1F5F9",
-        "fill-slate-200": "#E2E8F0",
-        "fill-slate-300": "#CAD5E2",
-        "fill-slate-400": "#90A1B9",
-        "fill-slate-500": "#62748E",
-        "fill-slate-600": "#45556C",
-        "fill-slate-700": "#314158",
-        "fill-slate-800": "#1D293D",
-        "fill-slate-900": "#0F172B",
-        "fill-slate-950": "#020618",
-        "fill-gray-50": "#F9FAFB",
-        "fill-gray-100": "#F3F4F6",
-        "fill-gray-200": "#E5E7EB",
-        "fill-gray-300": "#D1D5DC",
-        "fill-gray-400": "#99A1AF",
-        "fill-gray-500": "#6A7282",
-        "fill-gray-600": "#4A5565",
-        "fill-gray-700": "#364153",
-        "fill-gray-800": "#1E2939",
-        "fill-gray-900": "#101828",
-        "fill-gray-950": "#030712",
-        "fill-zinc-50": "#FAFAFA",
-        "fill-zinc-100": "#F4F4F5",
-        "fill-zinc-200": "#E4E4E7",
-        "fill-zinc-300": "#D4D4D8",
-        "fill-zinc-400": "#9F9FA9",
-        "fill-zinc-500": "#71717B",
-        "fill-zinc-600": "#52525C",
-        "fill-zinc-700": "#3F3F46",
-        "fill-zinc-800": "#27272A",
-        "fill-zinc-900": "#18181B",
-        "fill-zinc-950": "#09090B",
-        "fill-neutral-50": "#F9F9F9",
-        "fill-neutral-100": "#F5F5F5",
-        "fill-neutral-200": "#E5E5E5",
-        "fill-neutral-300": "#D4D4D4",
-        "fill-neutral-400": "#A1A1A1",
-        "fill-neutral-500": "#737373",
-        "fill-neutral-600": "#525252",
-        "fill-neutral-700": "#404040",
-        "fill-neutral-800": "#262626",
-        "fill-neutral-900": "#111111",
-        "fill-neutral-950": "#0A0A0A",
-        "fill-stone-50": "#FAFAF9",
-        "fill-stone-100": "#F5F5F4",
-        "fill-stone-200": "#E7E5E4",
-        "fill-stone-300": "#D6D3D1",
-        "fill-stone-400": "#A6A09B",
-        "fill-stone-500": "#79716B",
-        "fill-stone-600": "#57534D",
-        "fill-stone-700": "#44403B",
-        "fill-stone-800": "#292524",
-        "fill-stone-900": "#1C1917",
-        "fill-stone-950": "#0C0A09",
-        "fill-white": "#FFFFFF",
-        "fill-black": "#000000"
-      },
-      Dark: {
-        "fill-red-50": "#460809",
-        "fill-red-100": "#82181A",
-        "fill-red-200": "#9F0712",
-        "fill-red-300": "#C10007",
-        "fill-red-400": "#E7000B",
-        "fill-red-500": "#FB2C36",
-        "fill-red-600": "#FF6467",
-        "fill-red-700": "#FFA2A2",
-        "fill-red-800": "#FFC9C9",
-        "fill-red-900": "#FFE2E2",
-        "fill-red-950": "#FEF2F2",
-        "fill-orange-50": "#441306",
-        "fill-orange-100": "#7E2A0C",
-        "fill-orange-200": "#9F2D00",
-        "fill-orange-300": "#CA3500",
-        "fill-orange-400": "#F54900",
-        "fill-orange-500": "#FF6900",
-        "fill-orange-600": "#FF8904",
-        "fill-orange-700": "#FFB86A",
-        "fill-orange-800": "#FFD6A7",
-        "fill-orange-900": "#FFEDD4",
-        "fill-orange-950": "#FFF7ED",
-        "fill-amber-50": "#461901",
-        "fill-amber-100": "#7B3306",
-        "fill-amber-200": "#973C00",
-        "fill-amber-300": "#BB4D00",
-        "fill-amber-400": "#E17100",
-        "fill-amber-500": "#FE9A00",
-        "fill-amber-600": "#FFB900",
-        "fill-amber-700": "#FFD230",
-        "fill-amber-800": "#FEE685",
-        "fill-amber-900": "#FEF3C6",
-        "fill-amber-950": "#FFFBEB",
-        "fill-yellow-50": "#432004",
-        "fill-yellow-100": "#733E0A",
-        "fill-yellow-200": "#894B00",
-        "fill-yellow-300": "#A65F00",
-        "fill-yellow-400": "#D08700",
-        "fill-yellow-500": "#F0B100",
-        "fill-yellow-600": "#FDC700",
-        "fill-yellow-700": "#FFDF20",
-        "fill-yellow-800": "#FFF085",
-        "fill-yellow-900": "#FEF9C2",
-        "fill-yellow-950": "#FEFCE8",
-        "fill-lime-50": "#192E03",
-        "fill-lime-100": "#35530E",
-        "fill-lime-200": "#3C6300",
-        "fill-lime-300": "#497D00",
-        "fill-lime-400": "#5EA500",
-        "fill-lime-500": "#7CCF00",
-        "fill-lime-600": "#9AE600",
-        "fill-lime-700": "#BBF451",
-        "fill-lime-800": "#D8F999",
-        "fill-lime-900": "#ECFCCA",
-        "fill-lime-950": "#F7FEE7",
-        "fill-green-50": "#032E15",
-        "fill-green-100": "#0D542B",
-        "fill-green-200": "#016630",
-        "fill-green-300": "#008236",
-        "fill-green-400": "#00A63E",
-        "fill-green-500": "#00C950",
-        "fill-green-600": "#05DF72",
-        "fill-green-700": "#7BF1A8",
-        "fill-green-800": "#B9F8CF",
-        "fill-green-900": "#DCFCE7",
-        "fill-green-950": "#F0FDF4",
-        "fill-emerald-50": "#002C22",
-        "fill-emerald-100": "#004F3B",
-        "fill-emerald-200": "#006045",
-        "fill-emerald-300": "#007A55",
-        "fill-emerald-400": "#009966",
-        "fill-emerald-500": "#00BC7D",
-        "fill-emerald-600": "#00D492",
-        "fill-emerald-700": "#5EE9B5",
-        "fill-emerald-800": "#A4F4CF",
-        "fill-emerald-900": "#D0FAE5",
-        "fill-emerald-950": "#ECFDF5",
-        "fill-teal-50": "#022F2E",
-        "fill-teal-100": "#0B4F4A",
-        "fill-teal-200": "#005F5A",
-        "fill-teal-300": "#00786F",
-        "fill-teal-400": "#009689",
-        "fill-teal-500": "#00BBA7",
-        "fill-teal-600": "#00D5BE",
-        "fill-teal-700": "#46ECD5",
-        "fill-teal-800": "#96F7E4",
-        "fill-teal-900": "#CBFBF1",
-        "fill-teal-950": "#F0FDFA",
-        "fill-cyan-50": "#053345",
-        "fill-cyan-100": "#104E64",
-        "fill-cyan-200": "#005F78",
-        "fill-cyan-300": "#007595",
-        "fill-cyan-400": "#0092B8",
-        "fill-cyan-500": "#00B8DB",
-        "fill-cyan-600": "#00D3F2",
-        "fill-cyan-700": "#53EAFD",
-        "fill-cyan-800": "#A2F4FD",
-        "fill-cyan-900": "#CEFAFE",
-        "fill-cyan-950": "#ECFEFF",
-        "fill-sky-50": "#052F4A",
-        "fill-sky-100": "#024A70",
-        "fill-sky-200": "#00598A",
-        "fill-sky-300": "#0069A8",
-        "fill-sky-400": "#0084D1",
-        "fill-sky-500": "#00A6F4",
-        "fill-sky-600": "#00BCFF",
-        "fill-sky-700": "#74D4FF",
-        "fill-sky-800": "#B8E6FE",
-        "fill-sky-900": "#DFF2FE",
-        "fill-sky-950": "#F0F9FF",
-        "fill-blue-50": "#162456",
-        "fill-blue-100": "#1C398E",
-        "fill-blue-200": "#193CB8",
-        "fill-blue-300": "#1447E6",
-        "fill-blue-400": "#155DFC",
-        "fill-blue-500": "#2B7FFF",
-        "fill-blue-600": "#51A2FF",
-        "fill-blue-700": "#8EC5FF",
-        "fill-blue-800": "#BEDBFF",
-        "fill-blue-900": "#DBEAFE",
-        "fill-blue-950": "#EFF6FF",
-        "fill-indigo-50": "#1E1A4D",
-        "fill-indigo-100": "#312C85",
-        "fill-indigo-200": "#372AAC",
-        "fill-indigo-300": "#432DD7",
-        "fill-indigo-400": "#4F39F6",
-        "fill-indigo-500": "#615FFF",
-        "fill-indigo-600": "#7C86FF",
-        "fill-indigo-700": "#A3B3FF",
-        "fill-indigo-800": "#C6D2FF",
-        "fill-indigo-900": "#E0E7FF",
-        "fill-indigo-950": "#EEF2FF",
-        "fill-violet-50": "#2F0D68",
-        "fill-violet-100": "#4D179A",
-        "fill-violet-200": "#5D0EC0",
-        "fill-violet-300": "#7008E7",
-        "fill-violet-400": "#7F22FE",
-        "fill-violet-500": "#8E51FF",
-        "fill-violet-600": "#A684FF",
-        "fill-violet-700": "#C4B4FF",
-        "fill-violet-800": "#DDD6FF",
-        "fill-violet-900": "#EDE9FE",
-        "fill-violet-950": "#F5F3FF",
-        "fill-purple-50": "#3C0366",
-        "fill-purple-100": "#59168B",
-        "fill-purple-200": "#6E11B0",
-        "fill-purple-300": "#8200DB",
-        "fill-purple-400": "#9810FA",
-        "fill-purple-500": "#AD46FF",
-        "fill-purple-600": "#C27AFF",
-        "fill-purple-700": "#DAB2FF",
-        "fill-purple-800": "#E9D4FF",
-        "fill-purple-900": "#F3E8FF",
-        "fill-purple-950": "#FAF5FF",
-        "fill-fuchsia-50": "#4B004F",
-        "fill-fuchsia-100": "#721378",
-        "fill-fuchsia-200": "#8A0194",
-        "fill-fuchsia-300": "#A800B7",
-        "fill-fuchsia-400": "#C800DE",
-        "fill-fuchsia-500": "#E12AFB",
-        "fill-fuchsia-600": "#ED6AFF",
-        "fill-fuchsia-700": "#F4A8FF",
-        "fill-fuchsia-800": "#F6CFFF",
-        "fill-fuchsia-900": "#FAE8FF",
-        "fill-fuchsia-950": "#FDF4FF",
-        "fill-pink-50": "#510424",
-        "fill-pink-100": "#861043",
-        "fill-pink-200": "#A3004C",
-        "fill-pink-300": "#C6005C",
-        "fill-pink-400": "#E60076",
-        "fill-pink-500": "#F6339A",
-        "fill-pink-600": "#FB64B6",
-        "fill-pink-700": "#FDA5D5",
-        "fill-pink-800": "#FCCEE8",
-        "fill-pink-900": "#FCE7F3",
-        "fill-pink-950": "#FDF2F8",
-        "fill-rose-50": "#4D0218",
-        "fill-rose-100": "#8B0836",
-        "fill-rose-200": "#A50036",
-        "fill-rose-300": "#C70036",
-        "fill-rose-400": "#EC003F",
-        "fill-rose-500": "#FF2056",
-        "fill-rose-600": "#FF637E",
-        "fill-rose-700": "#FFA1AD",
-        "fill-rose-800": "#FFCCD3",
-        "fill-rose-900": "#FFE4E6",
-        "fill-rose-950": "#FFF1F2",
-        "fill-slate-50": "#020618",
-        "fill-slate-100": "#0F172B",
-        "fill-slate-200": "#1D293D",
-        "fill-slate-300": "#314158",
-        "fill-slate-400": "#45556C",
-        "fill-slate-500": "#62748E",
-        "fill-slate-600": "#90A1B9",
-        "fill-slate-700": "#CAD5E2",
-        "fill-slate-800": "#E2E8F0",
-        "fill-slate-900": "#F1F5F9",
-        "fill-slate-950": "#F8FAFC",
-        "fill-gray-50": "#030712",
-        "fill-gray-100": "#101828",
-        "fill-gray-200": "#1E2939",
-        "fill-gray-300": "#364153",
-        "fill-gray-400": "#4A5565",
-        "fill-gray-500": "#6A7282",
-        "fill-gray-600": "#99A1AF",
-        "fill-gray-700": "#D1D5DC",
-        "fill-gray-800": "#E5E7EB",
-        "fill-gray-900": "#F3F4F6",
-        "fill-gray-950": "#F9FAFB",
-        "fill-zinc-50": "#09090B",
-        "fill-zinc-100": "#18181B",
-        "fill-zinc-200": "#27272A",
-        "fill-zinc-300": "#3F3F46",
-        "fill-zinc-400": "#52525C",
-        "fill-zinc-500": "#71717B",
-        "fill-zinc-600": "#9F9FA9",
-        "fill-zinc-700": "#D4D4D8",
-        "fill-zinc-800": "#E4E4E7",
-        "fill-zinc-900": "#F4F4F5",
-        "fill-zinc-950": "#FAFAFA",
-        "fill-neutral-50": "#161616",
-        "fill-neutral-100": "#111111",
-        "fill-neutral-200": "#262626",
-        "fill-neutral-300": "#404040",
-        "fill-neutral-400": "#525252",
-        "fill-neutral-500": "#737373",
-        "fill-neutral-600": "#A1A1A1",
-        "fill-neutral-700": "#D4D4D4",
-        "fill-neutral-800": "#E5E5E5",
-        "fill-neutral-900": "#F2F2F2",
-        "fill-neutral-950": "#F9F9F9",
-        "fill-stone-50": "#0C0A09",
-        "fill-stone-100": "#1C1917",
-        "fill-stone-200": "#292524",
-        "fill-stone-300": "#44403B",
-        "fill-stone-400": "#57534D",
-        "fill-stone-500": "#79716B",
-        "fill-stone-600": "#A6A09B",
-        "fill-stone-700": "#D6D3D1",
-        "fill-stone-800": "#E7E5E4",
-        "fill-stone-900": "#F5F5F4",
-        "fill-stone-950": "#FAFAF9",
-        "fill-white": "#000000",
-        "fill-black": "#FFFFFF"
-      }
+  var COLORS = {
+    currentcolor: "currentColor",
+    transparent: "transparent",
+    red: {
+      "50": "#FEF2F2",
+      "100": "#FFE2E2",
+      "200": "#FFC9C9",
+      "300": "#FFA2A2",
+      "400": "#FF6467",
+      "500": "#FB2C36",
+      "600": "#E7000B",
+      "700": "#C10007",
+      "800": "#9F0712",
+      "900": "#82181A"
     },
-    units: {
-      Default: {
-        "spacing-0": 0,
-        "spacing-px": 1,
-        "spacing-0p5": 2,
-        "spacing-1": 4,
-        "spacing-1p5": 6,
-        "spacing-2": 8,
-        "spacing-2p5": 10,
-        "spacing-3": 12,
-        "spacing-3p5": 14,
-        "spacing-4": 16,
-        "spacing-5": 20,
-        "spacing-6": 24,
-        "spacing-7": 28,
-        "spacing-8": 32,
-        "spacing-9": 36,
-        "spacing-10": 40,
-        "spacing-11": 44,
-        "spacing-12": 48,
-        "spacing-14": 56,
-        "spacing-16": 64,
-        "spacing-20": 80,
-        "spacing-24": 96,
-        "spacing-28": 112,
-        "spacing-32": 128,
-        "spacing-36": 144,
-        "spacing-40": 160,
-        "spacing-44": 176,
-        "spacing-48": 192,
-        "spacing-52": 208,
-        "spacing-56": 224,
-        "spacing-60": 240,
-        "spacing-64": 256,
-        "spacing-72": 288,
-        "spacing-80": 320,
-        "spacing-96": 384,
-        "spacing-full": 999,
-        "radius-none": 0,
-        "radius-xs": 2,
-        "radius-sm": 4,
-        "radius-md": 6,
-        "radius-lg": 8,
-        "radius-xl": 12,
-        "radius-2xl": 16,
-        "radius-3xl": 24,
-        "radius-4xl": 32,
-        "radius-full": 999,
-        "container-3xs": 256,
-        "container-2xs": 288,
-        "container-xs": 320,
-        "container-sm": 384,
-        "container-md": 448,
-        "container-lg": 512,
-        "container-xl": 576,
-        "container-2xl": 672,
-        "container-3xl": 768,
-        "container-4xl": 896,
-        "container-5xl": 1024,
-        "container-6xl": 1152,
-        "container-7xl": 1280
-      }
+    orange: {
+      "50": "#FFF7ED",
+      "100": "#FFEDD4",
+      "200": "#FFD6A7",
+      "300": "#FFB86A",
+      "400": "#FF8904",
+      "500": "#FF6900",
+      "600": "#F54900",
+      "700": "#CA3500",
+      "800": "#9F2D00",
+      "900": "#7E2A0C"
     },
-    typography: {
-      Default: {
-        "font-size-xs": 12,
-        "font-size-sm": 14,
-        "font-size-base": 16,
-        "font-size-lg": 18,
-        "font-size-xl": 20,
-        "font-size-2xl": 24,
-        "font-size-3xl": 30,
-        "font-size-4xl": 36,
-        "font-size-5xl": 48,
-        "font-size-6xl": 60,
-        "font-size-7xl": 72,
-        "font-size-8xl": 96,
-        "font-size-9xl": 128,
-        "line-height-xs": 16,
-        "line-height-sm": 20,
-        "line-height-base": 24,
-        "line-height-lg": 28,
-        "line-height-xl": 28,
-        "line-height-2xl": 32,
-        "line-height-3xl": 36,
-        "line-height-4xl": 40,
-        "line-height-5xl": 48,
-        "line-height-6xl": 60,
-        "line-height-7xl": 72,
-        "line-height-8xl": 96,
-        "line-height-9xl": 128,
-        "font-weight-thin": 100,
-        "font-weight-extralight": 200,
-        "font-weight-light": 300,
-        "font-weight-normal": 400,
-        "font-weight-medium": 500,
-        "font-weight-semibold": 600,
-        "font-weight-bold": 700,
-        "font-weight-extrabold": 800,
-        "font-weight-black": 900
-      }
+    amber: {
+      "50": "#FFFBEB",
+      "100": "#FEF3C6",
+      "200": "#FEE685",
+      "300": "#FFD230",
+      "400": "#FFB900",
+      "500": "#FE9A00",
+      "600": "#E17100",
+      "700": "#BB4D00",
+      "800": "#973C00",
+      "900": "#7B3306"
     },
-    shadows: {
-      Default: {
-        "shadow-2xs-1-offset-x": 0,
-        "shadow-2xs-1-offset-y": 1,
-        "shadow-2xs-1-blur": 0,
-        "shadow-2xs-1-spread": 0,
-        "shadow-2xs-1-color": "#0000000D",
-        "shadow-xs-1-offset-x": 0,
-        "shadow-xs-1-offset-y": 1,
-        "shadow-xs-1-blur": 2,
-        "shadow-xs-1-spread": 0,
-        "shadow-xs-1-color": "#0000000D",
-        "shadow-sm-1-offset-x": 0,
-        "shadow-sm-1-offset-y": 1,
-        "shadow-sm-1-blur": 3,
-        "shadow-sm-1-spread": 0,
-        "shadow-sm-1-color": "#0000001A",
-        "shadow-sm-2-offset-x": 0,
-        "shadow-sm-2-offset-y": 1,
-        "shadow-sm-2-blur": 2,
-        "shadow-sm-2-spread": -1,
-        "shadow-sm-2-color": "#0000001A",
-        "shadow-md-1-offset-x": 0,
-        "shadow-md-1-offset-y": 4,
-        "shadow-md-1-blur": 6,
-        "shadow-md-1-spread": -1,
-        "shadow-md-1-color": "#0000001A",
-        "shadow-md-2-offset-x": 0,
-        "shadow-md-2-offset-y": 2,
-        "shadow-md-2-blur": 4,
-        "shadow-md-2-spread": -2,
-        "shadow-md-2-color": "#0000001A",
-        "shadow-lg-1-offset-x": 0,
-        "shadow-lg-1-offset-y": 10,
-        "shadow-lg-1-blur": 15,
-        "shadow-lg-1-spread": -3,
-        "shadow-lg-1-color": "#0000001A",
-        "shadow-lg-2-offset-x": 0,
-        "shadow-lg-2-offset-y": 4,
-        "shadow-lg-2-blur": 6,
-        "shadow-lg-2-spread": -4,
-        "shadow-lg-2-color": "#0000001A",
-        "shadow-xl-1-offset-x": 0,
-        "shadow-xl-1-offset-y": 20,
-        "shadow-xl-1-blur": 25,
-        "shadow-xl-1-spread": -5,
-        "shadow-xl-1-color": "#0000001A",
-        "shadow-xl-2-offset-x": 0,
-        "shadow-xl-2-offset-y": 8,
-        "shadow-xl-2-blur": 10,
-        "shadow-xl-2-spread": -6,
-        "shadow-xl-2-color": "#0000001A",
-        "shadow-2xl-1-offset-x": 0,
-        "shadow-2xl-1-offset-y": 25,
-        "shadow-2xl-1-blur": 50,
-        "shadow-2xl-1-spread": -12,
-        "shadow-2xl-1-color": "#00000040"
-      }
-    }
+    yellow: {
+      "50": "#FEFCE8",
+      "100": "#FEF9C2",
+      "200": "#FFF085",
+      "300": "#FFDF20",
+      "400": "#FDC700",
+      "500": "#F0B100",
+      "600": "#D08700",
+      "700": "#A65F00",
+      "800": "#894B00",
+      "900": "#733E0A"
+    },
+    lime: {
+      "50": "#F7FEE7",
+      "100": "#ECFCCA",
+      "200": "#D8F999",
+      "300": "#BBF451",
+      "400": "#9AE600",
+      "500": "#7CCF00",
+      "600": "#5EA500",
+      "700": "#497D00",
+      "800": "#3C6300",
+      "900": "#35530E"
+    },
+    green: {
+      "50": "#F0FDF4",
+      "100": "#DCFCE7",
+      "200": "#B9F8CF",
+      "300": "#7BF1A8",
+      "400": "#05DF72",
+      "500": "#00C950",
+      "600": "#00A63E",
+      "700": "#008236",
+      "800": "#016630",
+      "900": "#0D542B"
+    },
+    emerald: {
+      "50": "#ECFDF5",
+      "100": "#D0FAE5",
+      "200": "#A4F4CF",
+      "300": "#5EE9B5",
+      "400": "#00D492",
+      "500": "#00BC7D",
+      "600": "#009966",
+      "700": "#007A55",
+      "800": "#006045",
+      "900": "#004F3B"
+    },
+    teal: {
+      "50": "#F0FDFA",
+      "100": "#CBFBF1",
+      "200": "#96F7E4",
+      "300": "#46ECD5",
+      "400": "#00D5BE",
+      "500": "#00BBA7",
+      "600": "#009689",
+      "700": "#00786F",
+      "800": "#005F5A",
+      "900": "#0B4F4A"
+    },
+    cyan: {
+      "50": "#ECFEFF",
+      "100": "#CEFAFE",
+      "200": "#A2F4FD",
+      "300": "#53EAFD",
+      "400": "#00D3F2",
+      "500": "#00B8DB",
+      "600": "#0092B8",
+      "700": "#007595",
+      "800": "#005F78",
+      "900": "#104E64"
+    },
+    sky: {
+      "50": "#F0F9FF",
+      "100": "#DFF2FE",
+      "200": "#B8E6FE",
+      "300": "#74D4FF",
+      "400": "#00BCFF",
+      "500": "#00A6F4",
+      "600": "#0084D1",
+      "700": "#0069A8",
+      "800": "#00598A",
+      "900": "#024A70"
+    },
+    blue: {
+      "50": "#EFF6FF",
+      "100": "#DBEAFE",
+      "200": "#BEDBFF",
+      "300": "#8EC5FF",
+      "400": "#51A2FF",
+      "500": "#2B7FFF",
+      "600": "#155DFC",
+      "700": "#1447E6",
+      "800": "#193CB8",
+      "900": "#1C398E"
+    },
+    indigo: {
+      "50": "#EEF2FF",
+      "100": "#E0E7FF",
+      "200": "#C6D2FF",
+      "300": "#A3B3FF",
+      "400": "#7C86FF",
+      "500": "#615FFF",
+      "600": "#4F39F6",
+      "700": "#432DD7",
+      "800": "#372AAC",
+      "900": "#312C85"
+    },
+    violet: {
+      "50": "#F5F3FF",
+      "100": "#EDE9FE",
+      "200": "#DDD6FF",
+      "300": "#C4B4FF",
+      "400": "#A684FF",
+      "500": "#8E51FF",
+      "600": "#7F22FE",
+      "700": "#7008E7",
+      "800": "#5D0EC0",
+      "900": "#4D179A"
+    },
+    purple: {
+      "50": "#FAF5FF",
+      "100": "#F3E8FF",
+      "200": "#E9D4FF",
+      "300": "#DAB2FF",
+      "400": "#C27AFF",
+      "500": "#AD46FF",
+      "600": "#9810FA",
+      "700": "#8200DB",
+      "800": "#6E11B0",
+      "900": "#59168B"
+    },
+    fuchsia: {
+      "50": "#FDF4FF",
+      "100": "#FAE8FF",
+      "200": "#F6CFFF",
+      "300": "#F4A8FF",
+      "400": "#ED6AFF",
+      "500": "#E12AFB",
+      "600": "#C800DE",
+      "700": "#A800B7",
+      "800": "#8A0194",
+      "900": "#721378"
+    },
+    pink: {
+      "50": "#FDF2F8",
+      "100": "#FCE7F3",
+      "200": "#FCCEE8",
+      "300": "#FDA5D5",
+      "400": "#FB64B6",
+      "500": "#F6339A",
+      "600": "#E60076",
+      "700": "#C6005C",
+      "800": "#A3004C",
+      "900": "#861043"
+    },
+    rose: {
+      "50": "#FFF1F2",
+      "100": "#FFE4E6",
+      "200": "#FFCCD3",
+      "300": "#FFA1AD",
+      "400": "#FF637E",
+      "500": "#FF2056",
+      "600": "#EC003F",
+      "700": "#C70036",
+      "800": "#A50036",
+      "900": "#8B0836"
+    },
+    slate: {
+      "50": "#F8FAFC",
+      "100": "#F1F5F9",
+      "200": "#E2E8F0",
+      "300": "#CAD5E2",
+      "400": "#90A1B9",
+      "500": "#62748E",
+      "600": "#45556C",
+      "700": "#314158",
+      "800": "#1D293D",
+      "900": "#0F172B"
+    },
+    gray: {
+      "50": "#F9FAFB",
+      "100": "#F3F4F6",
+      "200": "#E5E7EB",
+      "300": "#D1D5DC",
+      "400": "#99A1AF",
+      "500": "#6A7282",
+      "600": "#4A5565",
+      "700": "#364153",
+      "800": "#1E2939",
+      "900": "#101828"
+    },
+    zinc: {
+      "50": "#FAFAFA",
+      "100": "#F4F4F5",
+      "200": "#E4E4E7",
+      "300": "#D4D4D8",
+      "400": "#9F9FA9",
+      "500": "#71717B",
+      "600": "#52525C",
+      "700": "#3F3F46",
+      "800": "#27272A",
+      "900": "#18181B"
+    },
+    neutral: {
+      "50": "#F9F9F9",
+      "100": "#F5F5F5",
+      "200": "#E5E5E5",
+      "300": "#D4D4D4",
+      "400": "#A1A1A1",
+      "500": "#737373",
+      "600": "#525252",
+      "700": "#404040",
+      "800": "#262626",
+      "900": "#111111"
+    },
+    stone: {
+      "50": "#FAFAF9",
+      "100": "#F5F5F4",
+      "200": "#E7E5E4",
+      "300": "#D6D3D1",
+      "400": "#A6A09B",
+      "500": "#79716B",
+      "600": "#57534D",
+      "700": "#44403B",
+      "800": "#292524",
+      "900": "#1C1917"
+    },
+    white: "#FFFFFF",
+    black: "#000000"
   };
-
-  // unison-components/src/constants/colors.ts
-  var COLORS = (() => {
-    var _a, _b;
-    const colors = {
-      currentcolor: "currentColor",
-      transparent: "transparent"
-    };
-    for (const [name, hex] of Object.entries(TOKENS.colors.Light)) {
-      const [, hue, shade] = (_a = name.match(/^fill-([a-z]+)-(\d+)$/)) != null ? _a : [];
-      if (hue) {
-        const palette = (_b = colors[hue]) != null ? _b : {};
-        palette[shade] = hex;
-        colors[hue] = palette;
-      } else {
-        colors[name.replace(/^fill-/, "")] = hex;
-      }
-    }
-    return colors;
-  })();
-
-  // unison-components/src/constants/units.ts
-  var scale = (tokens, prefix) => Object.fromEntries(
-    Object.entries(tokens).filter(([name]) => name.startsWith(prefix)).map(([name, value]) => [name.slice(prefix.length), value])
-  );
-  var UNITS = scale(TOKENS.units.Default, "spacing-");
-  var UNITS_TAILWIND = Object.fromEntries(
-    Object.keys(UNITS).filter((key) => /^\d+p\d+$/.test(key)).map((key) => [key, key.replace("p", ".")])
-  );
-  var UNITS_FIGMA = {
-    /**
-     * Represents a fill dimension (width or height) that should fill the available space.
-     */
-    fill: "fill",
-    /**
-     * Represents a hug dimension (width or height) that should hug the content.
-     */
-    hug: "hug"
+  var SPACING = {
+    "0": 0,
+    px: 1,
+    "0p5": 2,
+    "1": 4,
+    "1p5": 6,
+    "2": 8,
+    "2p5": 10,
+    "3": 12,
+    "3p5": 14,
+    "4": 16,
+    "5": 20,
+    "6": 24,
+    "7": 28,
+    "8": 32,
+    "9": 36,
+    "10": 40,
+    "11": 44,
+    "12": 48,
+    "14": 56,
+    "16": 64,
+    "20": 80,
+    "24": 96,
+    "28": 112,
+    "32": 128,
+    "36": 144,
+    "40": 160,
+    "44": 176,
+    "48": 192,
+    "52": 208,
+    "56": 224,
+    "60": 240,
+    "64": 256,
+    "72": 288,
+    "80": 320,
+    "96": 384,
+    full: 999
   };
-  var RADII = scale(TOKENS.units.Default, "radius-");
-  var CONTAINERS = scale(TOKENS.units.Default, "container-");
-  var SHADOWS = [
-    ...new Set(Object.keys(TOKENS.shadows.Default).map((name) => name.split("-")[1]))
+  var SPACING_TAILWIND = {
+    "0p5": "0.5",
+    "1p5": "1.5",
+    "2p5": "2.5",
+    "3p5": "3.5"
+  };
+  var RADIUS = {
+    none: 0,
+    xs: 2,
+    sm: 4,
+    md: 6,
+    lg: 8,
+    xl: 12,
+    "2xl": 16,
+    "3xl": 24,
+    "4xl": 32,
+    full: 999
+  };
+  var CONTAINERS = {
+    "3xs": 256,
+    "2xs": 288,
+    xs: 320,
+    sm: 384,
+    md: 448,
+    lg: 512,
+    xl: 576,
+    "2xl": 672,
+    "3xl": 768,
+    "4xl": 896,
+    "5xl": 1024,
+    "6xl": 1152,
+    "7xl": 1280
+  };
+  var SHADOWS = ["2xs", "xs", "sm", "md", "lg", "xl", "2xl"];
+  var TEXT_SIZES = [
+    "xs",
+    "sm",
+    "base",
+    "lg",
+    "xl",
+    "2xl",
+    "3xl",
+    "4xl",
+    "5xl",
+    "6xl",
+    "7xl",
+    "8xl",
+    "9xl"
   ];
-  var TEXT_SIZES = Object.keys(scale(TOKENS.typography.Default, "font-size-"));
+
+  // unison-components/src/maps/index.ts
+  var SPACING_GROUPS = [
+    ["padding", "p"],
+    ["padding-vertical", "py"],
+    ["padding-horizontal", "px"],
+    ["padding-left", "pl"],
+    ["padding-right", "pr"],
+    ["padding-top", "pt"],
+    ["padding-bottom", "pb"],
+    ["gap", "gap"],
+    ["gap-horizontal", "gap-x"],
+    ["gap-vertical", "gap-y"]
+  ];
+  var RADIUS_GROUPS = [
+    ["corner-radius", "rounded"],
+    ["corner-radius-top-left", "rounded-tl"],
+    ["corner-radius-top-right", "rounded-tr"],
+    ["corner-radius-bottom-left", "rounded-bl"],
+    ["corner-radius-bottom-right", "rounded-br"]
+  ];
+  var COLOR_GROUPS = ["fill", "fill-hover", "stroke", "stroke-hover"];
+  var SIZE_MODES = ["fill", "hug"];
+  var NAMED_FLAGS = {
+    autolayout: ["autolayout-horizontal", "autolayout-vertical"],
+    alignment: [
+      "alignment-top-left",
+      "alignment-top-center",
+      "alignment-top-right",
+      "alignment-left",
+      "alignment-center",
+      "alignment-right",
+      "alignment-bottom-left",
+      "alignment-bottom-center",
+      "alignment-bottom-right"
+    ],
+    "effect-shadow": ["effect-shadow-none"],
+    "stroke-style": ["stroke-style-dashed", "stroke-style-solid"],
+    "typography-align": ["typography-align-left", "typography-align-center", "typography-align-right"],
+    "typography-decoration": ["typography-decoration-underline"],
+    "pointer-events": ["pointer-events-none", "pointer-events-auto"]
+  };
+  var table = /* @__PURE__ */ new Map();
+  var add = (name, flag) => table.set(name, Object.freeze(flag));
+  var _a;
+  for (const [group, prefix] of SPACING_GROUPS) {
+    for (const key of Object.keys(SPACING)) {
+      add("".concat(group, "-").concat(key), { group, className: "".concat(prefix, "-").concat((_a = SPACING_TAILWIND[key]) != null ? _a : key) });
+    }
+  }
+  for (const [group, prefix] of RADIUS_GROUPS) {
+    for (const key of Object.keys(RADIUS)) {
+      add("".concat(group, "-").concat(key), { group, className: "".concat(prefix, "-").concat(key) });
+    }
+  }
+  for (const name of SHADOWS) add("effect-shadow-".concat(name), { group: "effect-shadow", className: "shadow-".concat(name) });
+  for (const size of TEXT_SIZES) add("typography-".concat(size), { group: "typography", className: "text-".concat(size) });
+  var _a2;
+  for (const axis of ["width", "height"]) {
+    for (const key of Object.keys(SPACING)) {
+      add("".concat(axis, "-").concat(key), { group: axis, mode: "exact", unit: (_a2 = SPACING_TAILWIND[key]) != null ? _a2 : key, container: false });
+    }
+    for (const mode of SIZE_MODES) add("".concat(axis, "-").concat(mode), { group: "".concat(axis, "-mode"), mode });
+  }
+  for (const key of Object.keys(CONTAINERS))
+    add("width-".concat(key), { group: "width", mode: "exact", unit: key, container: true });
+  for (const [color, value] of Object.entries(COLORS)) {
+    for (const group of COLOR_GROUPS) {
+      if (typeof value === "string") {
+        add("".concat(group, "-").concat(color), { group, name: color, color, value });
+        continue;
+      }
+      for (const [shade, hex] of Object.entries(value)) {
+        const name = "".concat(color, "-").concat(shade);
+        add("".concat(group, "-").concat(name), { group, name, color, shade, value: hex });
+      }
+    }
+  }
+  for (const name of Object.values(NAMED_FLAGS).flat()) add(name, { group: "other" });
+  var FLAG_PREFIXES = new Set([...table.keys()].map((name) => name.split("-")[0]));
 
   // src/utilities.ts
   var _toHex = (n) => {
@@ -1089,8 +824,8 @@
     return hex.length === 1 ? "0".concat(hex) : hex;
   };
   var RGBToHEX = (rgb) => {
-    const scale2 = rgb.r <= 1 && rgb.g <= 1 && rgb.b <= 1 ? 255 : 1;
-    return "#".concat(_toHex(rgb.r * scale2)).concat(_toHex(rgb.g * scale2)).concat(_toHex(rgb.b * scale2));
+    const scale = rgb.r <= 1 && rgb.g <= 1 && rgb.b <= 1 ? 255 : 1;
+    return "#".concat(_toHex(rgb.r * scale)).concat(_toHex(rgb.g * scale)).concat(_toHex(rgb.b * scale));
   };
   var INDENT = " ".repeat(4);
   var META_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "children", "characters"]);
@@ -1118,14 +853,12 @@
     "corner-radius-top-right-",
     "corner-radius-bottom-right-",
     "corner-radius-bottom-left-",
-    "border-radius-",
     "typography-",
     "typography-align-",
     "typography-decoration-",
     "fill-",
     "fill-hover-",
     "stroke-",
-    "stroke-weight-",
     "stroke-style-",
     "stroke-hover-",
     "effect-"
@@ -1158,9 +891,9 @@
     return [...rest];
   };
   var _formatOpenTag = (tag, properties, indentation, selfClosing) => {
-    var _a;
+    var _a3;
     const flags = _openTagPropKeys(tag, properties).sort(_byPanelOrder);
-    const attributes = ((_a = STRING_PROP_KEYS[tag]) != null ? _a : []).filter((k) => typeof properties[k] === "string").map((k) => "".concat(k, '="').concat(properties[k], '"'));
+    const attributes = ((_a3 = STRING_PROP_KEYS[tag]) != null ? _a3 : []).filter((k) => typeof properties[k] === "string").map((k) => "".concat(k, '="').concat(properties[k], '"'));
     const keys = [...flags, ...attributes];
     if (keys.length === 0) {
       return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
@@ -1293,12 +1026,9 @@
   };
   var mapStrokeColor = buildColorMap("stroke-");
   var mapFillColor = buildColorMap("fill-");
-  var UNIT_TOKENS = /* @__PURE__ */ new Set([...Object.keys(UNITS), ...Object.keys(UNITS_FIGMA)]);
+  var UNIT_TOKENS = /* @__PURE__ */ new Set([...Object.keys(SPACING), ...SIZE_MODES]);
   var PIXEL_TO_TOKEN = {};
-  for (const [unit, pixels] of Object.entries(__spreadValues(__spreadValues({}, UNITS), UNITS_FIGMA))) {
-    if (typeof pixels !== "number") {
-      continue;
-    }
+  for (const [unit, pixels] of Object.entries(SPACING)) {
     PIXEL_TO_TOKEN[pixels] = unit;
   }
   var normalizeUnitName = (name) => name.trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-").replace(/(\d)\.(\d)/g, "$1p$2").replace(/\//g, "-").replace(/^05$/, "0p5").replace(/-05$/, "-0p5").replace(/(^|-)1px$/, "$1px");
@@ -1334,11 +1064,8 @@
   };
   var buildSizingMap = (prefix) => {
     const map2 = {};
-    for (const [unit, pixels] of Object.entries(__spreadValues(__spreadValues({}, UNITS), UNITS_FIGMA))) {
-      if (typeof pixels === "number") {
-        continue;
-      }
-      map2[unit.toUpperCase()] = "".concat(prefix).concat(unit);
+    for (const mode of SIZE_MODES) {
+      map2[mode.toUpperCase()] = "".concat(prefix).concat(mode);
     }
     return map2;
   };
@@ -1354,9 +1081,9 @@
   var mapPaddingRight = buildUnitMap("padding-right-");
   var mapPaddingTop = buildUnitMap("padding-top-");
   var mapPaddingBottom = buildUnitMap("padding-bottom-");
-  var RADIUS_TOKENS = new Set(Object.keys(RADII));
+  var RADIUS_TOKENS = new Set(Object.keys(RADIUS));
   var PIXEL_TO_RADIUS = {};
-  for (const [name, pixels] of Object.entries(RADII)) {
+  for (const [name, pixels] of Object.entries(RADIUS)) {
     PIXEL_TO_RADIUS[pixels] = name;
   }
   var matchTokenSuffix = (candidate, tokens) => {
@@ -1381,8 +1108,8 @@
     return pixels !== void 0 ? PIXEL_TO_RADIUS[pixels] : void 0;
   };
   var resolveContainerToken = (variableName) => {
-    var _a;
-    const [, key] = (_a = normalizeStyleName(variableName != null ? variableName : "").match(/(?:^|-)container-(.+)$/)) != null ? _a : [];
+    var _a3;
+    const [, key] = (_a3 = normalizeStyleName(variableName != null ? variableName : "").match(/(?:^|-)container-(.+)$/)) != null ? _a3 : [];
     return key !== void 0 && key in CONTAINERS ? key : void 0;
   };
   var SHADOW_TOKENS = /* @__PURE__ */ new Set(["none", "small", "large", ...SHADOWS]);
@@ -1418,14 +1145,14 @@
 
   // src/read/dimensions.ts
   var readDimensions = async (node) => {
-    var _a, _b;
+    var _a3, _b;
     const properties = {};
     const errors = [];
     if (node.type !== "VECTOR") {
       const layoutSizingHorizontal = node.layoutSizingHorizontal;
       const layoutSizingVertical = node.layoutSizingVertical;
       if (node.layoutSizingHorizontal === "FIXED") {
-        if ((_a = node.boundVariables) == null ? void 0 : _a.width) {
+        if ((_a3 = node.boundVariables) == null ? void 0 : _a3.width) {
           const className = await resolveBoundWidthClass(node.boundVariables.width, node.width);
           if (className) {
             properties[className] = true;
@@ -1470,8 +1197,8 @@
 
   // src/read/color.ts
   var resolveBoundPaintColor = async (prefix, paint) => {
-    var _a, _b, _c;
-    const id = (_b = (_a = paint.boundVariables) == null ? void 0 : _a.color) == null ? void 0 : _b.id;
+    var _a3, _b, _c;
+    const id = (_b = (_a3 = paint.boundVariables) == null ? void 0 : _a3.color) == null ? void 0 : _b.id;
     const variable = id ? await getVariable(id) : null;
     const hex = RGBToHEX(paint.color);
     const className = resolveColorClass(prefix, variable == null ? void 0 : variable.name, hex);
@@ -1480,7 +1207,7 @@
 
   // src/read/fill.ts
   var readFill = async (node) => {
-    var _a, _b;
+    var _a3, _b;
     const properties = {};
     const errors = [];
     const warnings = [];
@@ -1490,7 +1217,7 @@
         message: "Error @ ".concat(node.name, " \u2013 FILL mixed values are not supported.")
       });
     } else if (node.fills[0]) {
-      const fill = (_a = node.fills) == null ? void 0 : _a[0];
+      const fill = (_a3 = node.fills) == null ? void 0 : _a3[0];
       const type = fill.type;
       const visible = fill.visible;
       if (type !== "SOLID") {
@@ -1538,11 +1265,11 @@
 
   // src/read/stroke.ts
   var readStroke = async (node) => {
-    var _a, _b, _c;
+    var _a3, _b, _c;
     const properties = {};
     const errors = [];
     const warnings = [];
-    if (((_a = node.strokes) == null ? void 0 : _a.length) > 1) {
+    if (((_a3 = node.strokes) == null ? void 0 : _a3.length) > 1) {
       errors.push({
         nodeId: node.id,
         message: "Error @ ".concat(node.name, " \u2013 STROKE mixed values are not supported.")
@@ -1683,13 +1410,13 @@
     });
   };
   var readDiscreteCorners = async (node) => {
-    var _a, _b, _c, _d, _e;
+    var _a3, _b, _c, _d, _e;
     const properties = {};
     const errors = [];
     const corners = [
       {
         value: node.topLeftRadius,
-        bound: (_a = node.boundVariables) == null ? void 0 : _a.topLeftRadius,
+        bound: (_a3 = node.boundVariables) == null ? void 0 : _a3.topLeftRadius,
         prefix: "corner-radius-top-left-",
         label: "top left"
       },
@@ -1758,7 +1485,7 @@
     return { properties, errors, warnings: [] };
   };
   var readCornerRadius = async (node) => {
-    var _a;
+    var _a3;
     if (hasDiscreteCorners(node)) {
       return readDiscreteCorners(node);
     }
@@ -1770,14 +1497,14 @@
         message: "Error @ ".concat(node.name, " \u2013 CORNER RADIUS values cannot be mixed.")
       });
     } else if (node.cornerRadius > 0) {
-      await emitCorner(node, "corner-radius-", node.cornerRadius, (_a = node.boundVariables) == null ? void 0 : _a.topLeftRadius, properties, errors);
+      await emitCorner(node, "corner-radius-", node.cornerRadius, (_a3 = node.boundVariables) == null ? void 0 : _a3.topLeftRadius, properties, errors);
     }
     return { properties, errors, warnings: [] };
   };
 
   // src/read/effect.ts
   var readEffect = async (node) => {
-    var _a;
+    var _a3;
     const properties = {};
     const errors = [];
     const warnings = [];
@@ -1797,7 +1524,7 @@
     if (token === void 0) {
       errors.push({
         nodeId: node.id,
-        message: "Error @ ".concat(node.name, ' \u2013 EFFECT style "').concat((_a = style == null ? void 0 : style.name) != null ? _a : node.effectStyleId, '" does not match a shadow token.')
+        message: "Error @ ".concat(node.name, ' \u2013 EFFECT style "').concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.effectStyleId, '" does not match a shadow token.')
       });
     } else {
       properties["effect-shadow-".concat(token)] = true;
@@ -1815,10 +1542,10 @@
     return resolveBoundUnitClass("", bound, pixels);
   };
   var readGap = async (node) => {
-    var _a, _b;
+    var _a3, _b;
     const properties = {};
     const errors = [];
-    const items = node.itemSpacing > 0 ? await readSpacing(node, "GAP", node.itemSpacing, (_a = node.boundVariables) == null ? void 0 : _a.itemSpacing, errors) : void 0;
+    const items = node.itemSpacing > 0 ? await readSpacing(node, "GAP", node.itemSpacing, (_a3 = node.boundVariables) == null ? void 0 : _a3.itemSpacing, errors) : void 0;
     const rowSpacing = node.layoutWrap === "WRAP" ? node.counterAxisSpacing : null;
     const rows = rowSpacing !== null && rowSpacing > 0 ? await readSpacing(node, "GAP vertical", rowSpacing, (_b = node.boundVariables) == null ? void 0 : _b.counterAxisSpacing, errors) : void 0;
     if (rows === void 0 || rows === items) {
@@ -1856,13 +1583,13 @@
 
   // src/read/padding.ts
   var readPadding = async (node) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+    var _a3, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
     const properties = {};
     const errors = [];
     let paddingVertical = 0;
     let paddingHorizontal = 0;
     if (node.paddingLeft === node.paddingRight && node.paddingLeft > 0 && node.paddingRight > 0) {
-      if (((_a = node.boundVariables) == null ? void 0 : _a.paddingLeft) === void 0 || ((_b = node.boundVariables) == null ? void 0 : _b.paddingRight) === void 0) {
+      if (((_a3 = node.boundVariables) == null ? void 0 : _a3.paddingLeft) === void 0 || ((_b = node.boundVariables) == null ? void 0 : _b.paddingRight) === void 0) {
         errors.push({
           nodeId: node.id,
           message: "Error @ ".concat(node.name, " \u2013 PADDING vertical value not bound to a variable.")
@@ -2054,7 +1781,7 @@
 
   // src/read/typography.ts
   var readTypography = async (node) => {
-    var _a;
+    var _a3;
     const properties = {};
     const errors = [];
     if (node.textStyleId === void 0) {
@@ -2070,7 +1797,7 @@
     } else {
       const textStyle = await figma.getStyleByIdAsync(node.textStyleId);
       if (textStyle) {
-        const size = (_a = textStyle.name.match(/^text-(.+)$/)) == null ? void 0 : _a[1];
+        const size = (_a3 = textStyle.name.match(/^text-(.+)$/)) == null ? void 0 : _a3[1];
         properties["typography-".concat(size != null ? size : textStyle.name)] = true;
       }
     }
@@ -2207,12 +1934,12 @@
     message: error.message.replace(/^Error @/, "Notice @")
   });
   var _node = async (node) => {
-    var _a, _b, _c, _d;
+    var _a3, _b, _c, _d;
     switch (node.type) {
       case "FRAME":
         return serializeFrame(node);
       case "GROUP": {
-        if (((_a = node.children[0]) == null ? void 0 : _a.name) === "Bounding box" && ((_b = node.children[1]) == null ? void 0 : _b.type) === "VECTOR") {
+        if (((_a3 = node.children[0]) == null ? void 0 : _a3.name) === "Bounding box" && ((_b = node.children[1]) == null ? void 0 : _b.type) === "VECTOR") {
           return serializeVector(node.children[1], node);
         }
         if (node.children.length === 2 && ((_c = node.children[0]) == null ? void 0 : _c.type) === "VECTOR" && ((_d = node.children[1]) == null ? void 0 : _d.type) === "RECTANGLE") {
@@ -2302,8 +2029,8 @@
     return false;
   };
   var recordSelection = () => {
-    var _a, _b;
-    const id = (_b = (_a = figma.currentPage.selection[0]) == null ? void 0 : _a.id) != null ? _b : null;
+    var _a3, _b;
+    const id = (_b = (_a3 = figma.currentPage.selection[0]) == null ? void 0 : _a3.id) != null ? _b : null;
     if (restoringSelection) {
       restoringSelection = false;
       currentSelectionId = id;
@@ -2317,9 +2044,9 @@
   };
   recordSelection();
   figma.ui.onmessage = async (msg) => {
-    var _a, _b;
+    var _a3, _b;
     if (msg.type === "toggleOutput") {
-      showOutput = (_a = msg.showOutput) != null ? _a : true;
+      showOutput = (_a3 = msg.showOutput) != null ? _a3 : true;
       runner();
       return;
     }

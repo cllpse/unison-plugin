@@ -1,17 +1,17 @@
-import { COLORS } from "../unison-components/src/constants/colors"
-import { CONTAINERS, RADII, SHADOWS, UNITS, UNITS_FIGMA } from "../unison-components/src/constants/units"
+import { COLORS, CONTAINERS, RADIUS, SHADOWS, SPACING } from "../unison-components/dist/tokens"
+import { SIZE_MODES } from "../unison-components/src/maps"
 import type {
   FigmaFill,
   FigmaFrameGap,
   FigmaFrameHeight,
   FigmaFrameWidth,
-  FigmaPadding,
-  FigmaPaddingBottom,
-  FigmaPaddingHorizontal,
-  FigmaPaddingLeft,
-  FigmaPaddingRight,
-  FigmaPaddingTop,
-  FigmaPaddingVertical,
+  FigmaFramePadding,
+  FigmaFramePaddingBottom,
+  FigmaFramePaddingHorizontal,
+  FigmaFramePaddingLeft,
+  FigmaFramePaddingRight,
+  FigmaFramePaddingTop,
+  FigmaFramePaddingVertical,
   FigmaStroke,
 } from "../unison-components/src/types/figmaProperties"
 import type { HEX } from "./types"
@@ -114,15 +114,11 @@ export const mapStrokeColor = buildColorMap<keyof FigmaStroke>("stroke-")
 
 export const mapFillColor = buildColorMap<keyof FigmaFill>("fill-")
 
-const UNIT_TOKENS = new Set([...Object.keys(UNITS), ...Object.keys(UNITS_FIGMA)])
+const UNIT_TOKENS = new Set<string>([...Object.keys(SPACING), ...SIZE_MODES])
 
 const PIXEL_TO_TOKEN: Record<number, string> = {}
 
-for (const [unit, pixels] of Object.entries({ ...UNITS, ...UNITS_FIGMA })) {
-  if (typeof pixels !== "number") {
-    continue
-  }
-
+for (const [unit, pixels] of Object.entries(SPACING)) {
   PIXEL_TO_TOKEN[pixels] = unit
 }
 
@@ -187,12 +183,8 @@ const buildUnitMap = <ClassName extends string>(prefix: string): Record<number, 
 const buildSizingMap = <ClassName extends string>(prefix: string): Record<string, ClassName> => {
   const map: Record<string, ClassName> = {}
 
-  for (const [unit, pixels] of Object.entries({ ...UNITS, ...UNITS_FIGMA })) {
-    if (typeof pixels === "number") {
-      continue
-    }
-
-    map[unit.toUpperCase()] = `${prefix}${unit}` as ClassName
+  for (const mode of SIZE_MODES) {
+    map[mode.toUpperCase()] = `${prefix}${mode}` as ClassName
   }
 
   return map
@@ -208,25 +200,25 @@ export const mapHeight = buildSizingMap<keyof FigmaFrameHeight>("height-")
 
 export const mapGap = buildUnitMap<keyof FigmaFrameGap>("gap-")
 
-export const mapPadding = buildUnitMap<keyof FigmaPadding>("padding-")
+export const mapPadding = buildUnitMap<keyof FigmaFramePadding>("padding-")
 
-export const mapPaddingVertical = buildUnitMap<keyof FigmaPaddingVertical>("padding-vertical-")
+export const mapPaddingVertical = buildUnitMap<keyof FigmaFramePaddingVertical>("padding-vertical-")
 
-export const mapPaddingHorizontal = buildUnitMap<keyof FigmaPaddingHorizontal>("padding-horizontal-")
+export const mapPaddingHorizontal = buildUnitMap<keyof FigmaFramePaddingHorizontal>("padding-horizontal-")
 
-export const mapPaddingLeft = buildUnitMap<keyof FigmaPaddingLeft>("padding-left-")
+export const mapPaddingLeft = buildUnitMap<keyof FigmaFramePaddingLeft>("padding-left-")
 
-export const mapPaddingRight = buildUnitMap<keyof FigmaPaddingRight>("padding-right-")
+export const mapPaddingRight = buildUnitMap<keyof FigmaFramePaddingRight>("padding-right-")
 
-export const mapPaddingTop = buildUnitMap<keyof FigmaPaddingTop>("padding-top-")
+export const mapPaddingTop = buildUnitMap<keyof FigmaFramePaddingTop>("padding-top-")
 
-export const mapPaddingBottom = buildUnitMap<keyof FigmaPaddingBottom>("padding-bottom-")
+export const mapPaddingBottom = buildUnitMap<keyof FigmaFramePaddingBottom>("padding-bottom-")
 
-const RADIUS_TOKENS = new Set<string>(Object.keys(RADII))
+const RADIUS_TOKENS = new Set<string>(Object.keys(RADIUS))
 
 const PIXEL_TO_RADIUS: Record<number, string> = {}
 
-for (const [name, pixels] of Object.entries(RADII)) {
+for (const [name, pixels] of Object.entries(RADIUS)) {
   PIXEL_TO_RADIUS[pixels] = name
 }
 
