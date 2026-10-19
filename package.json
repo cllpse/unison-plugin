@@ -21,7 +21,7 @@
     "@types/react": "^19.3.0",
     "esbuild": "0.27.3",
     "react-native": "^0.87.1",
-    "typescript": "^5"
+    "typescript": "^7.0.2"
   },
   "packageManager": "bun@1.4.3"
 }
