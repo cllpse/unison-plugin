@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "plugin:build:typescript": "esbuild src/index.ts --bundle --outfile=dist/index.js --target=chrome58",
-    "plugin:build:files": "cp -r ./src/manifest.json ./dist/manifest.json && cp -r ./src/index.html ./dist/index.html && cp -r ./src/placeholder.js ./dist/placeholder.js",
+    "plugin:build:files": "cp -r ./src/manifest.json ./dist/manifest.json && cp -r ./src/index.html ./dist/index.html",
     "plugin:build": "bun run plugin:build:typescript && bun run plugin:build:files",
     "plugin:watch": "bun watch.js",
     "lint": "biome check",

@@ -9,7 +9,8 @@
   "documentAccess": "dynamic-page",
   "editorType": ["figma", "dev"],
   "networkAccess": {
-    "allowedDomains": ["none"]
+    "allowedDomains": ["https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+    "reasoning": "Loads Figma's UI font, Inter, for the plugin UI."
   },
   "relaunchButtons": [
     {

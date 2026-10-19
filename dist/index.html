@@ -4,9 +4,21 @@
   <head>
     <meta charset="utf-8">
 
+    <!-- Figma's UI font. The plugin iframe has no access to the editor's own copy, so it is loaded like other plugins do
+         (the manifest allows these two hosts). Variable weights, for Figma's 450 and 550. -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&display=swap">
+
     <style>
+      /* Figma UI3 look: Inter 11/16 at weight 450 (550 for strong text), Figma's code font stack, and Figma's injected
+         theme colors (themeColors: true), so light and dark follow the editor. */
       :root {
-        --font-family: system-ui, -apple-system, Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', sans-serif;
+        --font-family: Inter, Helvetica, sans-serif;
+        --font-mono: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        /* Values (the output and the issues), a step up from the 11px labels, like the values in Figma's sidebar. */
+        --font-size-value: 12px;
+        /* Same ratio as Figma's body style, 16px on 11px. */
+        --line-height-value: calc(var(--font-size-value) * 16 / 11);
       }
 
       *, ::before, ::after {
@@ -27,14 +39,14 @@
         /* The window is a fixed frame: every scrollable region is a child, so the
            page itself never grows a scrollbar of its own. */
         overflow: hidden;
-        background-color: var(--figma-color-bg);
-      }
-
-      body, input[type="checkbox"]::after {
         font-family: var(--font-family);
-        font-size: 12px;
-        line-height: calc(12px * 1.5);
+        font-size: 11px;
+        font-weight: 450;
+        line-height: 16px;
+        letter-spacing: 0.005em;
         color: var(--figma-color-text);
+        background-color: var(--figma-color-bg);
+        -webkit-font-smoothing: antialiased;
       }
 
       header {
@@ -43,49 +55,16 @@
         align-items: center;
         justify-content: space-between;
         flex-shrink: 0;
-        padding: 12px;
-        gap: 4px;
-        border: none;
+        height: 40px;
+        /* 8px on the right lines the header buttons up with the toolbar's. */
+        padding: 0 8px 0 16px;
+        gap: 8px;
         background-color: var(--figma-color-bg);
         border-bottom: 1px solid var(--figma-color-border);
       }
 
-      fieldset {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        flex-shrink: 0;
-        gap: 4px;
-        padding: 0;
-        border: none;
-      }
-
-      input[type="checkbox"] {
-        position: relative;
-        appearance: none;
-        -webkit-appearance: none;
-        width: 16px;
-        height: 16px;
-        border: 1px solid var(--figma-color-border);
-        border-radius: 4px;
-        background-color: var(--figma-color-bg-hover);
-        cursor: pointer;
-        flex-shrink: 0;
-      }
-
-      input[type="checkbox"]:checked::after {
-        content: "✓";
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        height: 100%;
-        font-family: var(--font-family);
-        opacity: 0.9;
-      }
-
       label {
-        cursor: pointer;
+        cursor: default;
       }
 
       /* The output pane: the code, with the toolbar floating over its top-right corner. */
@@ -100,33 +79,25 @@
         flex: 1 1 auto;
         min-height: 0;
         width: 100%;
+        margin: 0;
         border: none;
         outline: none;
-        padding: 12px;
+        padding: 12px 16px;
         resize: none;
-        font-family: monospace;
-        font-size: inherit;
-        line-height: inherit;
+        font-family: var(--font-mono);
+        font-size: var(--font-size-value);
+        line-height: var(--line-height-value);
+        letter-spacing: 0;
+        color: var(--figma-color-text);
         background-color: var(--figma-color-bg-secondary);
         user-select: text;
         border-bottom: 1px solid var(--figma-color-border);
         white-space: nowrap;
+        scrollbar-gutter: stable;
       }
 
-      /* Figma-style icon buttons (24px, 5px corners), floating over the output's top-right corner. */
-      menu {
-        display: flex;
-        flex-direction: row;
-        gap: 4px;
-        margin: 0;
-        padding: 0;
-        position: absolute;
-        top: 8px;
-        right: 8px;
-      }
-
-      button,
-      label.icon-button {
+      /* :where keeps this base at zero specificity, so the toolbar group's own fill and hover override it. */
+      :where(button, label.icon-button) {
         position: relative;
         display: flex;
         align-items: center;
@@ -134,17 +105,42 @@
         width: 24px;
         height: 24px;
         padding: 0;
-        border: none;
-        border-radius: 5px;
+        border: 1px solid transparent;
+        border-radius: 4px;
         outline: none;
         appearance: none;
         background-color: transparent;
-        color: var(--figma-color-icon-secondary);
-        cursor: pointer;
+        color: var(--figma-color-icon);
+        cursor: default;
 
-        &:hover {
+        &:not(:disabled):hover {
           background-color: var(--figma-color-bg-hover);
-          color: var(--figma-color-icon);
+        }
+
+        &:not(:disabled):active {
+          background-color: var(--figma-color-bg-pressed);
+        }
+
+        &:focus-visible {
+          border-color: var(--figma-color-border-selected);
+        }
+
+        /* A toggle button, like the ones in Figma's sidebar: selected blue while on. */
+        &[aria-pressed="true"] {
+          background-color: var(--figma-color-bg-selected);
+          color: var(--figma-color-icon-brand);
+
+          &:hover {
+            background-color: var(--figma-color-bg-selected-hover);
+          }
+
+          &:active {
+            background-color: var(--figma-color-bg-selected-pressed);
+          }
+        }
+
+        &:disabled {
+          color: var(--figma-color-icon-disabled);
         }
 
         svg {
@@ -153,32 +149,45 @@
         }
       }
 
-      /* Groups: back, then refresh and copy. */
-      #refresh {
-        margin-left: 4px;
+      /* The toolbar floats 8px in from the output's top-right corner. It is a
+         segmented group like the rotate and flip buttons in Figma's sidebar: each button has its own grey fill and a 1px
+         transparent line separates them. The fill is one step darker than Figma's (tertiary, not secondary) because the
+         code pane under it is already secondary grey. */
+      menu {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        flex-direction: row;
+        gap: 1px;
+        margin: 0;
+        padding: 0;
+
+        button {
+          border-radius: 0;
+          background-color: var(--figma-color-bg-tertiary);
+        }
+
+        button:first-child {
+          border-radius: 5px 0 0 5px;
+        }
+
+        button:last-child {
+          border-radius: 0 5px 5px 0;
+        }
+
+        /* Hover and press both go exactly one shade past the fill, toward the text color so it works in light and dark. */
+        button:not(:disabled):hover,
+        button:not(:disabled):active {
+          background-color: color-mix(in srgb, var(--figma-color-bg-tertiary), var(--figma-color-text) 8%);
+        }
       }
 
-      /* Import sits before "Show output", 8px apart. */
+      /* Import sits before the "Show output" toggle, 8px apart. */
       .header-actions {
         display: flex;
         align-items: center;
         gap: 8px;
-
-        /* The 24px icon overhangs the 18px text line instead of growing the header. On hover only the icon lightens; it
-           gets no background. */
-        #import {
-          margin-block: -3px;
-          color: var(--figma-color-icon);
-
-          &:hover {
-            background-color: transparent;
-            color: var(--figma-color-icon-secondary);
-          }
-        }
-
-        fieldset {
-          margin: 0;
-        }
       }
 
       /* The import icon is a label for the file input, so a click opens the file picker natively. The input stays in
@@ -198,8 +207,26 @@
         min-height: 0;
         max-height: 50%;
         overflow: hidden auto;
-        padding: 12px;
+        padding: 12px 16px;
         gap: 4px;
+        font-size: var(--font-size-value);
+        line-height: var(--line-height-value);
+        scrollbar-gutter: stable;
+      }
+
+      /* Section title, like the headings in Figma's properties panel. */
+      .title {
+        margin-bottom: 4px;
+        font-weight: 550;
+      }
+
+      /* The top bar's label, set like the section titles in Figma's sidebar (Frame, Position, Layout), but muted. */
+      #hint {
+        font-weight: 550;
+        color: var(--figma-color-text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       /* With the output pane hidden the issues list is the only flexible child,
@@ -213,14 +240,8 @@
         max-height: none;
       }
 
-      /* Scrollbars are overlay-ish: the gutter is reserved so revealing a thumb
-         never reflows the content, but track and thumb stay transparent until
-         the region is actually scrolled (or pointed at). */
-      textarea,
-      summary {
-        scrollbar-gutter: stable;
-      }
-
+      /* Scrollbars are overlay-ish: the gutter is reserved (scrollbar-gutter on textarea and summary) so revealing a
+         thumb never reflows the content, but track and thumb stay transparent unless the region is being scrolled. */
       textarea::-webkit-scrollbar,
       summary::-webkit-scrollbar {
         width: 10px;
@@ -245,120 +266,106 @@
       }
 
       textarea[data-scrolling]::-webkit-scrollbar-thumb,
-      textarea:hover::-webkit-scrollbar-thumb,
-      summary[data-scrolling]::-webkit-scrollbar-thumb,
-      summary:hover::-webkit-scrollbar-thumb {
+      summary[data-scrolling]::-webkit-scrollbar-thumb {
         background-color: var(--figma-color-text-tertiary);
       }
 
-      textarea::-webkit-scrollbar-thumb:hover,
-      textarea::-webkit-scrollbar-thumb:active,
-      summary::-webkit-scrollbar-thumb:hover,
-      summary::-webkit-scrollbar-thumb:active {
+      textarea[data-scrolling]::-webkit-scrollbar-thumb:hover,
+      textarea[data-scrolling]::-webkit-scrollbar-thumb:active,
+      summary[data-scrolling]::-webkit-scrollbar-thumb:hover,
+      summary[data-scrolling]::-webkit-scrollbar-thumb:active {
         background-color: var(--figma-color-text-secondary);
       }
 
-      p, label, input[type="checkbox"]::after {
-        display: inline;
-        width: fit-content;
+      p {
         margin: 0;
-        font-size: inherit;
-        font-family: inherit;
-        line-height: inherit;
       }
 
-      p:not(:first-child):not(:last-child) {
-        margin-top: 2px;
-        margin-bottom: 2px;
+      .warning {
+        color: var(--figma-color-text-warning);
       }
 
-      p.warning {
-        color: var(--figma-color-text-brand);
-      }
-
-      p.danger {
+      .danger {
         color: var(--figma-color-text-danger);
       }
 
-      p.tertiary {
-        color: var(--figma-color-text-tertiary);
+      .secondary {
+        color: var(--figma-color-text-secondary);
       }
 
-      p[data-id],
-      p[data-id] {
+      /* Issues link to their layer. */
+      summary [data-id] {
+        width: fit-content;
         cursor: pointer;
-      }
 
-      p[data-id]:hover,
-      p[data-id]:hover {
-        text-decoration: underline;
+        &:hover {
+          text-decoration: underline;
+        }
       }
     </style>
   </head>
 
   <body>
     <header>
-      <p class="tertiary" id="copy-hint"></p>
+      <p id="hint"></p>
 
       <div class="header-actions">
-        <label id="import" class="icon-button" for="import-file" aria-label="Import tokens" title="Import tokens as variables and styles">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5.5 17.63 8.75v6.5L12 18.5l-5.63-3.25v-6.5z" /><path d="M12 9v5M9.75 12 12 14.25 14.25 12" /></svg>
+        <label id="import" class="icon-button" for="import-file" aria-label="Import design tokens as variables and styles">
+          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M295.08-156.12 109.96-480l185.12-324.08h370.03L850.04-480 665.11-156.12H295.08Zm28.03-47.96h313.97L794.96-480 637.08-756.12H323.11L165.04-480l158.07 275.92ZM480-480Z" /><path d="M456-600h48v96h96v48h-96v96h-48v-96h-96v-48h96Z" /></svg>
         </label>
         <input id="import-file" type="file" accept=".json,application/json" tabindex="-1" />
-        <fieldset>
-          <input type="checkbox" id="checkbox" checked>
-          <label for="checkbox">Show output</label>
-        </fieldset>
+        <button id="output-toggle" type="button" aria-pressed="true" aria-label="Show component code">
+          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M228-317.15 65.15-480 228-643.04 262.42-609 133.04-480l129.38 129L228-317.15Zm188.35 120.53-46.23-14.23 172.73-553.03 46.42 14.53-172.92 552.73ZM732-317.15 697.77-351l129.38-129-129.38-129L732-643.04 895.04-480 732-317.15Z" /></svg>
+        </button>
       </div>
     </header>
 
     <div class="output">
       <textarea id="textarea" spellcheck="false"></textarea>
 
+
       <menu>
-        <button id="back" type="button" title="Go back to previous layer">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 12H7M11 8l-4 4 4 4" /></svg>
+        <button id="back" type="button" aria-label="Select previous layer">
+          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M382.88-306.69 209.58-480l173.3-173.31 33.93 33.46-115.77 115.77h449.38v47.96H301.04l115.77 115.77-33.93 33.66Z" /></svg>
         </button>
-        <button id="refresh" type="button" title="Re-generate output">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.95 10.5A5 5 0 1 0 17 13" /><path d="M17 6.5v4h-4" /></svg>
+        <button id="refresh" type="button" aria-label="Regenerate component code">
+          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M482.01-219.27q-109.02 0-185.26-76.18-76.25-76.18-76.25-184.52t76.25-184.55q76.24-76.21 185.29-76.21 65.65 0 119.96 29.54 54.31 29.54 89.73 78.69v-108.23h47.96V-545H543.96v-47.96h116.96q-28.34-45.65-75.3-72.73-46.95-27.08-103.54-27.08-88.93 0-151.27 62.16-62.35 62.15-62.35 150.73 0 88.57 62.22 150.61 62.22 62.04 151.29 62.04 82.91 0 142.03-54.69 59.12-54.7 67.88-134.89H741q-7.42 101.31-81.69 169.42-74.26 68.12-177.3 68.12Z" /></svg>
         </button>
-        <button id="copy" type="button" title="Copy output to clipboard">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.5" y="9.5" width="8" height="8" rx="1.5" /><path d="M14.5 9.5V8A1.5 1.5 0 0 0 13 6.5H8A1.5 1.5 0 0 0 6.5 8v5A1.5 1.5 0 0 0 8 14.5h1.5" /></svg>
+        <button id="copy" type="button" aria-label="Copy component code">
+          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M276.31-400.42v47.96h-91.95q-24.96 0-42.62-17.57-17.66-17.56-17.66-42.7v-363.42q0-24.96 17.65-42.62 17.66-17.65 42.62-17.65h363.42q24.96 0 42.61 17.73 17.66 17.73 17.66 42.79v92.21h-47.96v-92.46q0-5.2-3.47-8.75-3.46-3.56-8.84-3.56H184.35q-5.39 0-8.85 3.56-3.46 3.55-3.46 8.75v363.42q0 5.38 3.46 8.84 3.46 3.47 8.85 3.47h91.96Zm135.92 276.34q-24.96 0-42.61-17.65-17.66-17.66-17.66-42.62v-363.42q0-24.96 17.66-42.61 17.65-17.66 42.61-17.66h363.42q24.96 0 42.62 17.66 17.65 17.65 17.65 42.61v363.42q0 24.96-17.65 42.62-17.66 17.65-42.62 17.65H412.23Zm0-47.96h363.42q5.39 0 8.85-3.46t3.46-8.85v-363.42q0-5.38-3.46-8.84-3.46-3.47-8.85-3.47H412.23q-5.38 0-8.84 3.47-3.47 3.46-3.47 8.84v363.42q0 5.39 3.47 8.85 3.46 3.46 8.84 3.46Zm181.81-194.11Z" /></svg>
         </button>
       </menu>
     </div>
 
     <summary>
-      <p><strong>Issues</strong></p>
+      <p class="title">Issues</p>
 
-      <p class="tertiary">None found</p>
+      <p class="secondary">None found</p>
     </summary>
-
-    <script src="placeholder.js"></script>
 
     <script>
       const textarea = document.getElementById("textarea")
       const summary = document.querySelector("summary")
-      const checkbox = document.getElementById("checkbox")
+      const outputToggle = document.getElementById("output-toggle")
       const refresh = document.getElementById("refresh")
       const back = document.getElementById("back")
       const copy = document.getElementById("copy")
       const importFile = document.getElementById("import-file")
-      const copyHint = document.getElementById("copy-hint")
-      let copyHintTimeout
+      const hintText = document.getElementById("hint")
+      let hintTimeout
 
       // Mark a region while it is being scrolled; the mark is what fades its
       // scrollbar in, and it clears once scrolling has settled.
-      const revealScrollbarWhileScrolling = (el) => {
+      const revealScrollbarWhileScrolling = (element) => {
         let timer = 0
 
-        el.addEventListener("scroll", () => {
-          el.dataset.scrolling = ""
+        element.addEventListener("scroll", () => {
+          element.dataset.scrolling = ""
 
           clearTimeout(timer)
 
           timer = setTimeout(() => {
-            delete el.dataset.scrolling
+            delete element.dataset.scrolling
           }, 600)
         }, { passive: true })
       }
@@ -368,45 +375,89 @@
 
       // Every toolbar button confirms what it did here, briefly.
       const showHint = (text, duration = 1500) => {
-        copyHint.textContent = text
-        clearTimeout(copyHintTimeout)
-        copyHintTimeout = setTimeout(() => {
-          copyHint.textContent = ""
+        hintText.textContent = text
+
+        clearTimeout(hintTimeout)
+
+        hintTimeout = setTimeout(() => {
+          hintText.textContent = ""
         }, duration)
       }
 
-      const copyOutput = () => {
+      // Hovering a button names it in the same place, in place of a native tooltip.
+      for (const button of document.querySelectorAll("[aria-label]")) {
+        button.addEventListener("mouseenter", () => {
+          clearTimeout(hintTimeout)
+          hintText.textContent = button.getAttribute("aria-label")
+        })
+
+        // A confirmation shown after a click stays until its own timeout.
+        button.addEventListener("mouseleave", () => {
+          if (hintText.textContent === button.getAttribute("aria-label")) hintText.textContent = ""
+        })
+      }
+
+      copy.onclick = () => {
         const { selectionStart, selectionEnd } = textarea
 
         textarea.focus()
         textarea.select()
         document.execCommand("copy")
         textarea.setSelectionRange(selectionStart, selectionEnd)
-        showHint("Copied to clipboard")
+        showHint("Copied component code")
       }
-
-      copy.onclick = copyOutput
 
       const setLoading = () => {
-        textarea.value = "Loading…"
+        textarea.value = "Generating component code…"
       }
+
+      const isOutputShown = () => outputToggle.getAttribute("aria-pressed") === "true"
 
       const applyOutputVisibility = () => {
-        document.body.classList.toggle("output-hidden", !checkbox.checked)
-        window.parent.postMessage({ pluginMessage: { type: "toggleOutput", showOutput: checkbox.checked } }, "*")
+        document.body.classList.toggle("output-hidden", !isOutputShown())
+        window.parent.postMessage({ pluginMessage: { type: "toggleOutput", showOutput: isOutputShown() } }, "*")
       }
 
-      checkbox.onchange = () => {
+      outputToggle.onclick = () => {
+        outputToggle.setAttribute("aria-pressed", String(!isOutputShown()))
         setLoading()
         applyOutputVisibility()
       }
 
       applyOutputVisibility()
 
-      textarea.value = window.placeholder
+      // Nothing selected: the output holds a prompt to select a frame, and the toolbar can't act on anything.
+      const setNothingSelected = (nothingSelected) => {
+        if (nothingSelected) textarea.value = "Select a frame to generate component code…"
+
+        for (const button of [back, refresh, copy]) {
+          button.disabled = nothingSelected
+        }
+      }
+
+      const renderIssues = (errors, warnings) => {
+        let html = `<p class="title">Issues</p>`
+
+        if (errors.length === 0 && warnings.length === 0) {
+          html += `<p class="secondary">None found</p>`
+        }
+
+        for (const e of errors) {
+          html += `<p class="danger" data-id="${e.nodeId}">${e.message}</p>`
+        }
+
+        for (const w of warnings) {
+          html += `<p class="warning" data-id="${w.nodeId}">${w.message}</p>`
+        }
+
+        summary.innerHTML = html
+      }
+
+      // Nothing is selected until the plugin's first run says otherwise.
+      setNothingSelected(true)
 
       refresh.onclick = () => {
-        showHint("Refreshing…")
+        showHint("Regenerating component code…")
         setLoading()
         window.parent.postMessage({ pluginMessage: { type: "refresh" } }, "*")
       }
@@ -419,7 +470,7 @@
       importFile.onchange = async () => {
         const file = importFile.files[0]
 
-        if (!file) return
+        if (file === undefined) return
 
         showHint(`Importing ${file.name}…`, 60000)
         setLoading()
@@ -427,7 +478,7 @@
       }
 
       back.onclick = () => {
-        showHint("Going back…")
+        showHint("Selecting previous layer…")
         setLoading()
         window.parent.postMessage({ pluginMessage: { type: "back" } }, "*")
       }
@@ -435,42 +486,38 @@
       summary.onclick = (e) => {
         const id = e.target.closest("p[data-id]")?.dataset.id
 
-        if (!id) return
+        if (id === undefined) return
 
         setLoading()
         window.parent.postMessage({ pluginMessage: { selectNode: id } }, "*")
       }
 
       window.onmessage = (event) => {
-        const { output, warnings, errors, loading, hint } = event.data.pluginMessage
+        const { output, warnings, errors, loading, hint, empty } = event.data.pluginMessage
 
-        if (hint) {
+        if (hint !== undefined) {
           showHint(hint.text, hint.duration)
 
           return
         }
 
         if (loading) {
-          textarea.value = "Loading…"
+          setLoading()
 
           return
         }
 
-        let html = `<p><strong>Issues</strong></p>`
+        const nothingSelected = empty === true
 
-        if (warnings.length === 0 && errors.length === 0) {
-          html += `<p class="tertiary">None found</p>`
+        setNothingSelected(nothingSelected)
+
+        if (nothingSelected) {
+          renderIssues([], [])
+
+          return
         }
 
-        for (const e of errors) {
-          html += `<p class="danger" data-id="${e.nodeId}">${e.message}</p>`
-        }
-
-        for (const w of warnings) {
-          html += `<p class="warning" data-id="${w.nodeId}">${w.message}</p>`
-        }
-
-        summary.innerHTML = html
+        renderIssues(errors, warnings)
         textarea.value = output
       }
     </script>
