@@ -1,7 +1,7 @@
 import { adoptStyle } from "./legacyNames"
 
 // Figma's variable import can't create styles, so this creates a text style per Tailwind text size from the imported
-// `font-size-<name>` and `line-height-<name>` variables (unison-components/dist/tokens.json),
+// `font-size-<name>` and `line-height-<name>` variables (unison-components/dist/design-tokens.json),
 // with both bound. New styles use Inter Regular; running it again updates the styles in place and keeps their font.
 const TYPOGRAPHY_VARIABLE = /^(font-size|line-height)-(.+)$/
 

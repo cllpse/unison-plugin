@@ -378,7 +378,7 @@
     return def;
   };
 
-  // unison-components/dist/tokens.ts
+  // unison-components/dist/design-tokens.ts
   var COLORS = {
     currentcolor: "currentColor",
     transparent: "transparent",
@@ -737,7 +737,7 @@
     "9xl"
   ];
 
-  // unison-components/src/maps/index.ts
+  // unison-components/maps/index.ts
   var SPACING_GROUPS = [
     ["padding", "p"],
     ["padding-vertical", "py"],

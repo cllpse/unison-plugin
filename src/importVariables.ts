@@ -1,7 +1,7 @@
 import { canonicalName } from "./legacyNames"
 
 // Figma's own import takes one collection at a time and doesn't apply the files' scopes, so this imports every
-// collection in a picked tokens file (unison-components/dist/tokens.json) in one go, with each variable's
+// collection in a picked tokens file (unison-components/dist/design-tokens.json) in one go, with each variable's
 // scopes. Its top-level keys are the collections, then the modes, each in the format of Figma's own export. Running it
 // again updates the variables in place, so bound layers and styles keep working.
 const TYPES: Record<string, VariableResolvedDataType> = {

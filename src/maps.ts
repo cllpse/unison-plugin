@@ -1,10 +1,9 @@
-import { COLORS, CONTAINERS, RADIUS, SHADOWS, SPACING } from "../unison-components/dist/tokens"
-import { SIZE_MODES } from "../unison-components/src/maps"
+import { COLORS, CONTAINERS, RADIUS, SHADOWS, SPACING } from "../unison-components/dist/design-tokens"
+import { SIZE_MODES } from "../unison-components/maps"
 import type {
   FigmaFill,
   FigmaFrameGap,
   FigmaFrameHeight,
-  FigmaFrameWidth,
   FigmaFramePadding,
   FigmaFramePaddingBottom,
   FigmaFramePaddingHorizontal,
@@ -12,8 +11,9 @@ import type {
   FigmaFramePaddingRight,
   FigmaFramePaddingTop,
   FigmaFramePaddingVertical,
+  FigmaFrameWidth,
   FigmaStroke,
-} from "../unison-components/src/types/figmaProperties"
+} from "../unison-components/types/figma"
 import type { HEX } from "./types"
 import { isHEX } from "./utilities"
 

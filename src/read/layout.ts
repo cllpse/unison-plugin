@@ -1,4 +1,4 @@
-import type { FigmaFrameAutolayout } from "../../unison-components/src/types/figmaProperties"
+import type { FigmaFrameAutolayout } from "../../unison-components/types/figma"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
 
 const map: Record<string, keyof FigmaFrameAutolayout> = {

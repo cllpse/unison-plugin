@@ -1,7 +1,7 @@
 import { adoptStyle } from "./legacyNames"
 
 // Figma's variable import can't create styles, so this creates an effect style per shadow from the imported
-// `shadow-<name>-<layer>-<field>` variables (unison-components/dist/tokens.json), each layer bound
+// `shadow-<name>-<layer>-<field>` variables (unison-components/dist/design-tokens.json), each layer bound
 // to its variables. Running it again updates the styles in place. readEffect reads the shadow back from the style's
 // name.
 const SHADOW_VARIABLE = /^shadow-([^-]+)-(\d+)-(offset-x|offset-y|blur|spread|color)$/
