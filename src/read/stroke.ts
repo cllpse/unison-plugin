@@ -6,7 +6,7 @@ export const readStroke = async (node: SceneNode & MinimalStrokesMixin): Promise
   if (node.strokes.length > 1) {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – STROKE: mixed` }],
+      errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "STROKE", problem: "mixed" }],
       warnings: [],
     }
   }

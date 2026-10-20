@@ -65,7 +65,12 @@ export const readAlignmentText = (node: TextNode): PropertiesErrorOrWarning => {
   return {
     properties: {},
     errors: [
-      { nodeId: node.id, message: `${truncateName(node.name)} – TEXT ALIGNMENT: must be left, center or right` },
+      {
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "TEXT ALIGNMENT",
+        problem: "must be left, center or right",
+      },
     ],
     warnings: [],
   }

@@ -17,20 +17,25 @@ const readSize = async (
     const className = await resolveFixedClass(bound)
 
     if (className === undefined) {
-      errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not a token` })
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not a token" })
     }
 
     return className
   }
 
   if (sizing === "FIXED") {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not bound` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not bound" })
 
     return undefined
   }
 
   if (sizing !== "FILL" && sizing !== "HUG") {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: must be fill or hug` })
+    errors.push({
+      nodeId: node.id,
+      layer: truncateName(node.name),
+      property: `${label}`,
+      problem: "must be fill or hug",
+    })
 
     return undefined
   }

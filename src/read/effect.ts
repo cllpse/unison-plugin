@@ -11,7 +11,9 @@ export const readEffect = async (node: SceneNode & BlendMixin): Promise<Properti
     return {
       properties: {},
       errors: [],
-      warnings: [{ nodeId: node.id, message: `${truncateName(node.name)} – EFFECT: not bound, skipped` }],
+      warnings: [
+        { nodeId: node.id, layer: truncateName(node.name), property: "EFFECT", problem: "not bound, skipped" },
+      ],
     }
   }
 
@@ -24,7 +26,9 @@ export const readEffect = async (node: SceneNode & BlendMixin): Promise<Properti
       errors: [
         {
           nodeId: node.id,
-          message: `${truncateName(node.name)} – EFFECT: not a token (${style?.name ?? node.effectStyleId})`,
+          layer: truncateName(node.name),
+          property: "EFFECT",
+          problem: `not a token (${style?.name ?? node.effectStyleId})`,
         },
       ],
       warnings: [],

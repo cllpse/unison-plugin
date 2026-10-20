@@ -28,7 +28,14 @@ export const readPaint = async (
   if (paint.type !== "SOLID") {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – ${kind}: unsupported (${paint.type})` }],
+      errors: [
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: `${kind}`,
+          problem: `unsupported (${paint.type})`,
+        },
+      ],
       warnings: [],
     }
   }
@@ -36,7 +43,7 @@ export const readPaint = async (
   if (paint.boundVariables?.color === undefined) {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – ${kind}: not bound` }],
+      errors: [{ nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: "not bound" }],
       warnings: [],
     }
   }
@@ -45,7 +52,7 @@ export const readPaint = async (
     return {
       properties: {},
       errors: [],
-      warnings: [{ nodeId: node.id, message: `${truncateName(node.name)} – ${kind}: hidden` }],
+      warnings: [{ nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: "hidden" }],
     }
   }
 
@@ -55,7 +62,9 @@ export const readPaint = async (
 
   return {
     properties: {},
-    errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – ${kind}: not a token (${label})` }],
+    errors: [
+      { nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: `not a token (${label})` },
+    ],
     warnings: [],
   }
 }

@@ -53,7 +53,9 @@ export const serializeUnknown = async (
     warnings: [
       {
         nodeId: node.id,
-        message: `${truncateName(node.name)} – LAYER: unsupported (${node.type})`,
+        layer: truncateName(node.name),
+        property: "LAYER",
+        problem: `unsupported (${node.type})`,
       },
       ...layout.warnings,
       ...dimensions.warnings,

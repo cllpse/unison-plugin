@@ -13,7 +13,9 @@ export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOr
   if (!flag) {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – AUTO LAYOUT: missing`, always: true }],
+      errors: [
+        { nodeId: node.id, layer: truncateName(node.name), property: "AUTO LAYOUT", problem: "missing", always: true },
+      ],
       warnings: [],
     }
   }

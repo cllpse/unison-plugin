@@ -924,16 +924,21 @@
     if (sizing === "FIXED" && bound) {
       const className = await resolveFixedClass(bound);
       if (className === void 0) {
-        errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not a token") });
+        errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not a token" });
       }
       return className;
     }
     if (sizing === "FIXED") {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not bound") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not bound" });
       return void 0;
     }
     if (sizing !== "FILL" && sizing !== "HUG") {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": must be fill or hug") });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "".concat(label),
+        problem: "must be fill or hug"
+      });
       return void 0;
     }
     return sizingFlags[sizing];
@@ -981,14 +986,21 @@
     if (paint.type !== "SOLID") {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(kind, ": unsupported (").concat(paint.type, ")") }],
+        errors: [
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "".concat(kind),
+            problem: "unsupported (".concat(paint.type, ")")
+          }
+        ],
         warnings: []
       };
     }
     if (((_a3 = paint.boundVariables) == null ? void 0 : _a3.color) === void 0) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(kind, ": not bound") }],
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not bound" }],
         warnings: []
       };
     }
@@ -996,14 +1008,16 @@
       return {
         properties: {},
         errors: [],
-        warnings: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(kind, ": hidden") }]
+        warnings: [{ nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "hidden" }]
       };
     }
     const { className, label } = await resolveBoundPaintColor("".concat(name, "-"), paint);
     if (className) return { properties: { [className]: true }, errors: [], warnings: [] };
     return {
       properties: {},
-      errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(kind, ": not a token (").concat(label, ")") }],
+      errors: [
+        { nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not a token (".concat(label, ")") }
+      ],
       warnings: []
     };
   };
@@ -1013,7 +1027,7 @@
     if (node.fills === figma.mixed) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 FILL: mixed") }],
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "FILL", problem: "mixed" }],
         warnings: []
       };
     }
@@ -1034,7 +1048,7 @@
     if (node.strokes.length > 1) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 STROKE: mixed") }],
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "STROKE", problem: "mixed" }],
         warnings: []
       };
     }
@@ -1111,7 +1125,12 @@
     return {
       properties: {},
       errors: [
-        { nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 TEXT ALIGNMENT: must be left, center or right") }
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "TEXT ALIGNMENT",
+          problem: "must be left, center or right"
+        }
       ],
       warnings: []
     };
@@ -1119,13 +1138,15 @@
 
   // src/read/cornerRadius.ts
   var hasDiscreteCorners = (node) => "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node;
-  var formatCornerError = (node, problem, label) => "".concat(truncateName(node.name), " \u2013 CORNER RADIUS").concat(label ? " ".concat(label) : "", ": ").concat(problem);
+  var getCornerError = (node, problem, label) => ({
+    nodeId: node.id,
+    layer: truncateName(node.name),
+    property: label ? "CORNER RADIUS ".concat(label) : "CORNER RADIUS",
+    problem
+  });
   var emitCorner = async (node, prefix, value, bound, properties, errors, label) => {
     if (value > 0 && bound === void 0) {
-      errors.push({
-        nodeId: node.id,
-        message: formatCornerError(node, "not bound", label)
-      });
+      errors.push(getCornerError(node, "not bound", label));
       return;
     }
     if (value === 0 && bound === void 0) {
@@ -1137,10 +1158,7 @@
       properties[className] = true;
       return;
     }
-    errors.push({
-      nodeId: node.id,
-      message: formatCornerError(node, "not a token", label)
-    });
+    errors.push(getCornerError(node, "not a token", label));
   };
   var readDiscreteCorners = async (node) => {
     var _a3, _b, _c, _d, _e;
@@ -1186,10 +1204,7 @@
     }
     if (baseCount === 4 && baseValue <= 0) return { properties, errors, warnings: [] };
     if (baseCount === 4 && corners.some((corner) => corner.bound === void 0)) {
-      errors.push({
-        nodeId: node.id,
-        message: formatCornerError(node, "not bound")
-      });
+      errors.push(getCornerError(node, "not bound"));
       return { properties, errors, warnings: [] };
     }
     if (baseCount === 4) {
@@ -1218,7 +1233,7 @@
     if (node.cornerRadius === figma.mixed) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 CORNER RADIUS: mixed") }],
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "CORNER RADIUS", problem: "mixed" }],
         warnings: []
       };
     }
@@ -1238,7 +1253,9 @@
       return {
         properties: {},
         errors: [],
-        warnings: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 EFFECT: not bound, skipped") }]
+        warnings: [
+          { nodeId: node.id, layer: truncateName(node.name), property: "EFFECT", problem: "not bound, skipped" }
+        ]
       };
     }
     const style = await figma.getStyleByIdAsync(node.effectStyleId);
@@ -1249,7 +1266,9 @@
         errors: [
           {
             nodeId: node.id,
-            message: "".concat(truncateName(node.name), " \u2013 EFFECT: not a token (").concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.effectStyleId, ")")
+            layer: truncateName(node.name),
+            property: "EFFECT",
+            problem: "not a token (".concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.effectStyleId, ")")
           }
         ],
         warnings: []
@@ -1261,12 +1280,12 @@
   // src/read/gap.ts
   var readSpacing = async (node, label, bound, errors) => {
     if (bound === void 0) {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not bound") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not bound" });
       return void 0;
     }
     const suffix = await resolveBoundUnitClass("", bound);
     if (suffix === void 0) {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not a token") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not a token" });
     }
     return suffix;
   };
@@ -1294,7 +1313,9 @@
     if (!flag) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 AUTO LAYOUT: missing"), always: true }],
+        errors: [
+          { nodeId: node.id, layer: truncateName(node.name), property: "AUTO LAYOUT", problem: "missing", always: true }
+        ],
         warnings: []
       };
     }
@@ -1316,7 +1337,7 @@
         properties[className] = true;
         return;
       }
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(label, ": not a token") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not a token" });
     };
     const horizontalPair = left === right && left > 0;
     const horizontalBound = (bound == null ? void 0 : bound.paddingLeft) !== void 0 && (bound == null ? void 0 : bound.paddingRight) !== void 0;
@@ -1327,23 +1348,25 @@
     if (horizontalPair && !horizontalBound) {
       errors.push({
         nodeId: node.id,
-        message: "".concat(truncateName(node.name), " \u2013 PADDING HORIZONTAL: not bound")
+        layer: truncateName(node.name),
+        property: "PADDING HORIZONTAL",
+        problem: "not bound"
       });
     }
     if (verticalPair && !verticalBound) {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING VERTICAL: not bound") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING VERTICAL", problem: "not bound" });
     }
     if (paddingHorizontal === 0 && left > 0 && (bound == null ? void 0 : bound.paddingLeft) === void 0) {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING LEFT: not bound") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING LEFT", problem: "not bound" });
     }
     if (paddingHorizontal === 0 && right > 0 && (bound == null ? void 0 : bound.paddingRight) === void 0) {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING RIGHT: not bound") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING RIGHT", problem: "not bound" });
     }
     if (paddingVertical === 0 && top > 0 && (bound == null ? void 0 : bound.paddingTop) === void 0) {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING TOP: not bound") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING TOP", problem: "not bound" });
     }
     if (paddingVertical === 0 && bottom > 0 && (bound == null ? void 0 : bound.paddingBottom) === void 0) {
-      errors.push({ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 PADDING BOTTOM: not bound") });
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING BOTTOM", problem: "not bound" });
     }
     if (paddingHorizontal > 0 && paddingHorizontal === paddingVertical) {
       await addClass("padding-", "PADDING", bound == null ? void 0 : bound.paddingLeft);
@@ -1414,7 +1437,9 @@
       warnings: [
         {
           nodeId: node.id,
-          message: "".concat(truncateName(node.name), " \u2013 GROUP: converted to frame")
+          layer: truncateName(node.name),
+          property: "GROUP",
+          problem: "converted to frame"
         }
       ]
     };
@@ -1440,14 +1465,14 @@
     if (node.textStyleId === "") {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 TYPOGRAPHY: not bound") }],
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "TYPOGRAPHY", problem: "not bound" }],
         warnings: []
       };
     }
     if (node.textStyleId === figma.mixed) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 TYPOGRAPHY: mixed") }],
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "TYPOGRAPHY", problem: "mixed" }],
         warnings: []
       };
     }
@@ -1459,7 +1484,9 @@
         errors: [
           {
             nodeId: node.id,
-            message: "".concat(truncateName(node.name), " \u2013 TYPOGRAPHY: not a token (").concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.textStyleId, ")")
+            layer: truncateName(node.name),
+            property: "TYPOGRAPHY",
+            problem: "not a token (".concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.textStyleId, ")")
           }
         ],
         warnings: []
@@ -1513,7 +1540,9 @@
       warnings: [
         {
           nodeId: node.id,
-          message: "".concat(truncateName(node.name), " \u2013 LAYER: unsupported (").concat(node.type, ")")
+          layer: truncateName(node.name),
+          property: "LAYER",
+          problem: "unsupported (".concat(node.type, ")")
         },
         ...layout.warnings,
         ...dimensions.warnings,
@@ -1537,7 +1566,9 @@
     if (geometry.length === 0) {
       errors.push({
         nodeId: node.id,
-        message: "".concat(truncateName(node.name), " \u2013 VECTOR PATH: missing")
+        layer: truncateName(node.name),
+        property: "VECTOR PATH",
+        problem: "missing"
       });
     }
     const bound = "boundVariables" in box ? box.boundVariables : void 0;
@@ -1546,23 +1577,31 @@
     if (!(bound == null ? void 0 : bound.width)) {
       errors.push({
         nodeId: box.id,
-        message: "".concat(truncateName(box.name), " \u2013 WIDTH: not bound")
+        layer: truncateName(box.name),
+        property: "WIDTH",
+        problem: "not bound"
       });
     } else if (width === void 0) {
       errors.push({
         nodeId: box.id,
-        message: "".concat(truncateName(box.name), " \u2013 WIDTH: not a token")
+        layer: truncateName(box.name),
+        property: "WIDTH",
+        problem: "not a token"
       });
     }
     if (!(bound == null ? void 0 : bound.height)) {
       errors.push({
         nodeId: box.id,
-        message: "".concat(truncateName(box.name), " \u2013 HEIGHT: not bound")
+        layer: truncateName(box.name),
+        property: "HEIGHT",
+        problem: "not bound"
       });
     } else if (height === void 0) {
       errors.push({
         nodeId: box.id,
-        message: "".concat(truncateName(box.name), " \u2013 HEIGHT: not a token")
+        layer: truncateName(box.name),
+        property: "HEIGHT",
+        problem: "not a token"
       });
     }
     const minX = box === node ? 0 : box.x - node.x;
@@ -1766,7 +1805,7 @@
       figma.ui.postMessage({
         output: "",
         warnings: [],
-        errors: [{ nodeId: node.id, message: "".concat(truncateName(node.name), " \u2013 ").concat(reason) }]
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "CODE", problem: reason }]
       });
     }
   };

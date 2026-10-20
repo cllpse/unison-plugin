@@ -179,7 +179,7 @@ const runner = async () => {
     figma.ui.postMessage({
       output: "",
       warnings: [],
-      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – ${reason}` }],
+      errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "CODE", problem: reason }],
     })
   }
 }

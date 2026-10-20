@@ -20,7 +20,7 @@ export const readPadding = async (node: SceneNode & AutoLayoutMixin): Promise<Pr
       return
     }
 
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not a token` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not a token" })
   }
 
   const horizontalPair = left === right && left > 0
@@ -33,28 +33,30 @@ export const readPadding = async (node: SceneNode & AutoLayoutMixin): Promise<Pr
   if (horizontalPair && !horizontalBound) {
     errors.push({
       nodeId: node.id,
-      message: `${truncateName(node.name)} – PADDING HORIZONTAL: not bound`,
+      layer: truncateName(node.name),
+      property: "PADDING HORIZONTAL",
+      problem: "not bound",
     })
   }
 
   if (verticalPair && !verticalBound) {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING VERTICAL: not bound` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING VERTICAL", problem: "not bound" })
   }
 
   if (paddingHorizontal === 0 && left > 0 && bound?.paddingLeft === undefined) {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING LEFT: not bound` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING LEFT", problem: "not bound" })
   }
 
   if (paddingHorizontal === 0 && right > 0 && bound?.paddingRight === undefined) {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING RIGHT: not bound` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING RIGHT", problem: "not bound" })
   }
 
   if (paddingVertical === 0 && top > 0 && bound?.paddingTop === undefined) {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING TOP: not bound` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING TOP", problem: "not bound" })
   }
 
   if (paddingVertical === 0 && bottom > 0 && bound?.paddingBottom === undefined) {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – PADDING BOTTOM: not bound` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING BOTTOM", problem: "not bound" })
   }
 
   if (paddingHorizontal > 0 && paddingHorizontal === paddingVertical) {

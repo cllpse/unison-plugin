@@ -6,7 +6,7 @@ export const readTypography = async (node: TextNode): Promise<PropertiesErrorOrW
   if (node.textStyleId === "") {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – TYPOGRAPHY: not bound` }],
+      errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "TYPOGRAPHY", problem: "not bound" }],
       warnings: [],
     }
   }
@@ -14,7 +14,7 @@ export const readTypography = async (node: TextNode): Promise<PropertiesErrorOrW
   if (node.textStyleId === figma.mixed) {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – TYPOGRAPHY: mixed` }],
+      errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "TYPOGRAPHY", problem: "mixed" }],
       warnings: [],
     }
   }
@@ -29,7 +29,9 @@ export const readTypography = async (node: TextNode): Promise<PropertiesErrorOrW
       errors: [
         {
           nodeId: node.id,
-          message: `${truncateName(node.name)} – TYPOGRAPHY: not a token (${style?.name ?? node.textStyleId})`,
+          layer: truncateName(node.name),
+          property: "TYPOGRAPHY",
+          problem: `not a token (${style?.name ?? node.textStyleId})`,
         },
       ],
       warnings: [],

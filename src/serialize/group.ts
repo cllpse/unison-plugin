@@ -19,7 +19,9 @@ export const serializeGroup = (node: GroupNode): PropertiesErrorOrWarning => {
     warnings: [
       {
         nodeId: node.id,
-        message: `${truncateName(node.name)} – GROUP: converted to frame`,
+        layer: truncateName(node.name),
+        property: "GROUP",
+        problem: "converted to frame",
       },
     ],
   }

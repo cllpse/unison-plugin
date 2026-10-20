@@ -12,8 +12,12 @@ type DiscreteCorner = {
 const hasDiscreteCorners = (node: SceneNode & CornerMixin): node is SceneNode & CornerMixin & RectangleCornerMixin =>
   "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node
 
-const formatCornerError = (node: SceneNode, problem: string, label?: string): string =>
-  `${truncateName(node.name)} – CORNER RADIUS${label ? ` ${label}` : ""}: ${problem}`
+const getCornerError = (node: SceneNode, problem: string, label?: string): ErrorOrWarning => ({
+  nodeId: node.id,
+  layer: truncateName(node.name),
+  property: label ? `CORNER RADIUS ${label}` : "CORNER RADIUS",
+  problem,
+})
 
 const emitCorner = async (
   node: SceneNode,
@@ -25,10 +29,7 @@ const emitCorner = async (
   label?: string,
 ) => {
   if (value > 0 && bound === undefined) {
-    errors.push({
-      nodeId: node.id,
-      message: formatCornerError(node, "not bound", label),
-    })
+    errors.push(getCornerError(node, "not bound", label))
 
     return
   }
@@ -48,10 +49,7 @@ const emitCorner = async (
     return
   }
 
-  errors.push({
-    nodeId: node.id,
-    message: formatCornerError(node, "not a token", label),
-  })
+  errors.push(getCornerError(node, "not a token", label))
 }
 
 const readDiscreteCorners = async (
@@ -106,10 +104,7 @@ const readDiscreteCorners = async (
   if (baseCount === 4 && baseValue <= 0) return { properties, errors, warnings: [] }
 
   if (baseCount === 4 && corners.some((corner) => corner.bound === undefined)) {
-    errors.push({
-      nodeId: node.id,
-      message: formatCornerError(node, "not bound"),
-    })
+    errors.push(getCornerError(node, "not bound"))
 
     return { properties, errors, warnings: [] }
   }
@@ -150,7 +145,7 @@ export const readCornerRadius = async (node: SceneNode & CornerMixin): Promise<P
   if (node.cornerRadius === figma.mixed) {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, message: `${truncateName(node.name)} – CORNER RADIUS: mixed` }],
+      errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "CORNER RADIUS", problem: "mixed" }],
       warnings: [],
     }
   }

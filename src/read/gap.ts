@@ -10,7 +10,7 @@ const readSpacing = async (
   errors: ErrorOrWarning[],
 ): Promise<string | undefined> => {
   if (bound === undefined) {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not bound` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not bound" })
 
     return undefined
   }
@@ -18,7 +18,7 @@ const readSpacing = async (
   const suffix = await resolveBoundUnitClass("", bound)
 
   if (suffix === undefined) {
-    errors.push({ nodeId: node.id, message: `${truncateName(node.name)} – ${label}: not a token` })
+    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not a token" })
   }
 
   return suffix

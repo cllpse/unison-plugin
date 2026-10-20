@@ -26,7 +26,9 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
   if (geometry.length === 0) {
     errors.push({
       nodeId: node.id,
-      message: `${truncateName(node.name)} – VECTOR PATH: missing`,
+      layer: truncateName(node.name),
+      property: "VECTOR PATH",
+      problem: "missing",
     })
   }
 
@@ -39,24 +41,32 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
   if (!bound?.width) {
     errors.push({
       nodeId: box.id,
-      message: `${truncateName(box.name)} – WIDTH: not bound`,
+      layer: truncateName(box.name),
+      property: "WIDTH",
+      problem: "not bound",
     })
   } else if (width === undefined) {
     errors.push({
       nodeId: box.id,
-      message: `${truncateName(box.name)} – WIDTH: not a token`,
+      layer: truncateName(box.name),
+      property: "WIDTH",
+      problem: "not a token",
     })
   }
 
   if (!bound?.height) {
     errors.push({
       nodeId: box.id,
-      message: `${truncateName(box.name)} – HEIGHT: not bound`,
+      layer: truncateName(box.name),
+      property: "HEIGHT",
+      problem: "not bound",
     })
   } else if (height === undefined) {
     errors.push({
       nodeId: box.id,
-      message: `${truncateName(box.name)} – HEIGHT: not a token`,
+      layer: truncateName(box.name),
+      property: "HEIGHT",
+      problem: "not a token",
     })
   }
 

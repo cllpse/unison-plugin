@@ -214,15 +214,15 @@
         scrollbar-gutter: stable;
       }
 
-      /* Section title, like the headings in Figma's properties panel. */
+      /* Section title, like the headings in Figma's properties panel, which sit 12px above their first row (8px here
+         plus the list's 4px gap). */
       .title {
-        margin-bottom: 4px;
+        margin-bottom: 8px;
         font-weight: 550;
       }
 
-      /* The top bar's label, set like the section titles in Figma's sidebar (Frame, Position, Layout), but muted. */
+      /* The top bar's label: body text, muted, on one line. */
       #hint {
-        font-weight: 550;
         color: var(--figma-color-text-secondary);
         white-space: nowrap;
         overflow: hidden;
@@ -282,11 +282,25 @@
       }
 
       .warning {
-        color: var(--figma-color-text-warning);
+        color: var(--figma-color-text-warning-secondary);
       }
 
       .danger {
         color: var(--figma-color-text-danger);
+      }
+
+      /* The property an issue is about, set apart like a tag tinted with the line's own color, so it works in light and
+         dark mode alike. */
+      .property {
+        /* Inline, so the row's hover underline runs through it. The vertical padding grows the tint from Inter's 1.21em
+           content area to the full line height. */
+        padding: calc((var(--line-height-value) - 1.21em) / 2) 4px;
+        border-radius: 3px;
+        background-color: color-mix(in srgb, currentColor 8%, transparent);
+      }
+
+      .success {
+        color: var(--figma-color-text-success);
       }
 
       .secondary {
@@ -298,8 +312,9 @@
         width: fit-content;
         cursor: pointer;
 
+        /* Drawn as one line under the whole row rather than text-decoration, which skips the tag's padding. */
         &:hover {
-          text-decoration: underline;
+          background: linear-gradient(currentColor, currentColor) 0 calc(100% - 3px) / 100% 1px no-repeat;
         }
       }
     </style>
@@ -340,7 +355,7 @@
     <summary>
       <p class="title">Issues</p>
 
-      <p class="secondary">None found</p>
+      <p class="secondary">Nothing selected</p>
     </summary>
 
     <script>
@@ -435,19 +450,27 @@
         }
       }
 
-      const renderIssues = (errors, warnings) => {
+      // PADDING LEFT reads as "Padding left".
+      const toSentenceCase = (text) => `${text.charAt(0)}${text.slice(1).toLowerCase()}`
+
+      const renderIssue = (issue, severity) =>
+        `<p class="${severity}" data-id="${issue.nodeId}">${issue.layer} <span class="property">${toSentenceCase(issue.property)}</span> ${issue.problem}</p>`
+
+      const renderIssues = (errors, warnings, nothingSelected = false) => {
         let html = `<p class="title">Issues</p>`
 
-        if (errors.length === 0 && warnings.length === 0) {
-          html += `<p class="secondary">None found</p>`
+        if (nothingSelected) {
+          html += `<p class="secondary">Nothing selected</p>`
+        } else if (errors.length === 0 && warnings.length === 0) {
+          html += `<p class="success">None found</p>`
         }
 
         for (const e of errors) {
-          html += `<p class="danger" data-id="${e.nodeId}">${e.message}</p>`
+          html += renderIssue(e, "danger")
         }
 
         for (const w of warnings) {
-          html += `<p class="warning" data-id="${w.nodeId}">${w.message}</p>`
+          html += renderIssue(w, "warning")
         }
 
         summary.innerHTML = html
@@ -512,7 +535,7 @@
         setNothingSelected(nothingSelected)
 
         if (nothingSelected) {
-          renderIssues([], [])
+          renderIssues([], [], true)
 
           return
         }
