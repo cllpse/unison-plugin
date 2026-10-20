@@ -1,12 +1,20 @@
 import { resolveTextSizeToken } from "../maps"
 import type { PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
+import { formatValue, truncateName } from "../utilities"
 
 export const readTypography = async (node: TextNode): Promise<PropertiesErrorOrWarning> => {
   if (node.textStyleId === "") {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "TYPOGRAPHY", problem: "not bound" }],
+      errors: [
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "TYPOGRAPHY",
+          problem: "not bound",
+          value: node.fontSize === figma.mixed ? undefined : formatValue(node.fontSize),
+        },
+      ],
       warnings: [],
     }
   }
@@ -31,7 +39,8 @@ export const readTypography = async (node: TextNode): Promise<PropertiesErrorOrW
           nodeId: node.id,
           layer: truncateName(node.name),
           property: "TYPOGRAPHY",
-          problem: `not a token (${style?.name ?? node.textStyleId})`,
+          problem: "not a token",
+          value: style?.name ?? node.textStyleId,
         },
       ],
       warnings: [],

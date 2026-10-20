@@ -382,7 +382,8 @@
   var resolveTag = (properties) => {
     if (properties.type === "TEXT") return "Text";
     if (properties.type === "VECTOR") return "Vector";
-    return "Frame";
+    if (properties.type === "FRAME" || properties.type === "GROUP") return "Frame";
+    return "This";
   };
   var renderChildren = (children, indentation) => children.map((child) => renderNode(child, indentation)).filter((part) => part.length > 0).join("\n");
   var renderNode = (node, indentation) => {
@@ -394,7 +395,7 @@
     const type = properties.type;
     if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation);
     if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation);
-    const selfClosing = tag === "Vector";
+    const selfClosing = tag === "Vector" || tag === "This" && children.length === 0;
     const open = formatOpenTag(tag, properties, indentation, selfClosing);
     if (selfClosing) return open;
     if (tag === "Text")
@@ -403,6 +404,7 @@
     return [open, ...inner.length > 0 ? [inner] : [], "".concat(indentation, "</").concat(tag, ">")].join("\n");
   };
   var renderComponentCode = (json) => renderNode(json, "");
+  var formatValue = (value) => typeof value === "number" ? Math.round(value * 100) / 100 : value.toLowerCase().replace(/_/g, " ");
   var MAX_NAME_LENGTH = 15;
   var truncateName = (name) => name.length > MAX_NAME_LENGTH ? "".concat(name.slice(0, MAX_NAME_LENGTH), "\u2026") : name;
 
@@ -466,7 +468,8 @@
           nodeId: node.id,
           layer: truncateName(node.name),
           property: "TEXT ALIGNMENT",
-          problem: "must be left, center or right"
+          problem: "must be left, center or right",
+          value: formatValue(alignment)
         }
       ],
       warnings: []
@@ -982,15 +985,16 @@
 
   // src/read/cornerRadius.ts
   var hasDiscreteCorners = (node) => "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node;
-  var getCornerError = (node, problem, label) => ({
+  var getCornerError = (node, problem, value, label) => ({
     nodeId: node.id,
     layer: truncateName(node.name),
     property: label ? "CORNER RADIUS ".concat(label) : "CORNER RADIUS",
-    problem
+    problem,
+    value: formatValue(value)
   });
   var emitCorner = async (node, prefix, value, bound, properties, errors, label) => {
     if (value > 0 && bound === void 0) {
-      errors.push(getCornerError(node, "not bound", label));
+      errors.push(getCornerError(node, "not bound", value, label));
       return;
     }
     if (value === 0 && bound === void 0) {
@@ -1002,7 +1006,7 @@
       properties[className] = true;
       return;
     }
-    errors.push(getCornerError(node, "not a token", label));
+    errors.push(getCornerError(node, "not a token", value, label));
   };
   var readDiscreteCorners = async (node) => {
     var _a3, _b, _c, _d, _e;
@@ -1048,7 +1052,7 @@
     }
     if (baseCount === 4 && baseValue <= 0) return { properties, errors, warnings: [] };
     if (baseCount === 4 && corners.some((corner) => corner.bound === void 0)) {
-      errors.push(getCornerError(node, "not bound"));
+      errors.push(getCornerError(node, "not bound", baseValue));
       return { properties, errors, warnings: [] };
     }
     if (baseCount === 4) {
@@ -1090,16 +1094,28 @@
   };
 
   // src/read/dimensions.ts
-  var readSize = async (node, label, sizing, bound, resolveFixedClass, sizingFlags, errors) => {
+  var readSize = async (node, label, sizing, size, bound, resolveFixedClass, sizingFlags, errors) => {
     if (sizing === "FIXED" && bound) {
       const className = await resolveFixedClass(bound);
       if (className === void 0) {
-        errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not a token" });
+        errors.push({
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "".concat(label),
+          problem: "not a token",
+          value: formatValue(size)
+        });
       }
       return className;
     }
     if (sizing === "FIXED") {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not bound" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "".concat(label),
+        problem: "not bound",
+        value: formatValue(size)
+      });
       return void 0;
     }
     if (sizing !== "FILL" && sizing !== "HUG") {
@@ -1107,7 +1123,8 @@
         nodeId: node.id,
         layer: truncateName(node.name),
         property: "".concat(label),
-        problem: "must be fill or hug"
+        problem: "must be fill or hug",
+        value: formatValue(sizing)
       });
       return void 0;
     }
@@ -1121,6 +1138,7 @@
       node,
       "WIDTH",
       node.layoutSizingHorizontal,
+      node.width,
       (_a3 = node.boundVariables) == null ? void 0 : _a3.width,
       resolveBoundWidthClass,
       WIDTH_SIZING,
@@ -1130,6 +1148,7 @@
       node,
       "HEIGHT",
       node.layoutSizingVertical,
+      node.height,
       (_b = node.boundVariables) == null ? void 0 : _b.height,
       (bound) => resolveBoundUnitClass("height-", bound),
       HEIGHT_SIZING,
@@ -1142,14 +1161,20 @@
 
   // src/read/effect.ts
   var readEffect = async (node) => {
-    var _a3;
+    var _a3, _b, _c;
     if (!node.effects.some((effect) => effect.visible)) return { properties: {}, errors: [], warnings: [] };
     if (node.effectStyleId === "") {
       return {
         properties: {},
         errors: [],
         warnings: [
-          { nodeId: node.id, layer: truncateName(node.name), property: "EFFECT", problem: "not bound, skipped" }
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "EFFECT",
+            problem: "not bound, skipped",
+            value: formatValue((_b = (_a3 = node.effects.find((effect) => effect.visible)) == null ? void 0 : _a3.type) != null ? _b : "")
+          }
         ]
       };
     }
@@ -1163,7 +1188,8 @@
             nodeId: node.id,
             layer: truncateName(node.name),
             property: "EFFECT",
-            problem: "not a token (".concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.effectStyleId, ")")
+            problem: "not a token",
+            value: (_c = style == null ? void 0 : style.name) != null ? _c : node.effectStyleId
           }
         ],
         warnings: []
@@ -1193,7 +1219,8 @@
             nodeId: node.id,
             layer: truncateName(node.name),
             property: "".concat(kind),
-            problem: "unsupported (".concat(paint.type, ")")
+            problem: "unsupported",
+            value: formatValue(paint.type)
           }
         ],
         warnings: []
@@ -1202,23 +1229,33 @@
     if (((_a3 = paint.boundVariables) == null ? void 0 : _a3.color) === void 0) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not bound" }],
+        errors: [
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "".concat(kind),
+            problem: "not bound",
+            value: RGBToHEX(paint.color)
+          }
+        ],
         warnings: []
       };
     }
+    const { className, label } = await resolveBoundPaintColor("".concat(name, "-"), paint);
     if (!paint.visible) {
       return {
         properties: {},
         errors: [],
-        warnings: [{ nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "hidden" }]
+        warnings: [
+          { nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "hidden", value: label }
+        ]
       };
     }
-    const { className, label } = await resolveBoundPaintColor("".concat(name, "-"), paint);
     if (className) return { properties: { [className]: true }, errors: [], warnings: [] };
     return {
       properties: {},
       errors: [
-        { nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not a token (".concat(label, ")") }
+        { nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not a token", value: label }
       ],
       warnings: []
     };
@@ -1237,14 +1274,26 @@
   };
 
   // src/read/gap.ts
-  var readSpacing = async (node, label, bound, errors) => {
+  var readSpacing = async (node, label, value, bound, errors) => {
     if (bound === void 0) {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not bound" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "".concat(label),
+        problem: "not bound",
+        value: formatValue(value)
+      });
       return void 0;
     }
     const suffix = await resolveBoundUnitClass("", bound);
     if (suffix === void 0) {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not a token" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "".concat(label),
+        problem: "not a token",
+        value: formatValue(value)
+      });
     }
     return suffix;
   };
@@ -1252,9 +1301,9 @@
     var _a3, _b;
     const properties = {};
     const errors = [];
-    const items = node.itemSpacing > 0 ? await readSpacing(node, "GAP", (_a3 = node.boundVariables) == null ? void 0 : _a3.itemSpacing, errors) : void 0;
+    const items = node.itemSpacing > 0 ? await readSpacing(node, "GAP", node.itemSpacing, (_a3 = node.boundVariables) == null ? void 0 : _a3.itemSpacing, errors) : void 0;
     const rowSpacing = node.layoutWrap === "WRAP" ? node.counterAxisSpacing : null;
-    const rows = rowSpacing !== null && rowSpacing > 0 ? await readSpacing(node, "GAP VERTICAL", (_b = node.boundVariables) == null ? void 0 : _b.counterAxisSpacing, errors) : void 0;
+    const rows = rowSpacing !== null && rowSpacing > 0 ? await readSpacing(node, "GAP VERTICAL", rowSpacing, (_b = node.boundVariables) == null ? void 0 : _b.counterAxisSpacing, errors) : void 0;
     const sameSpacing = rows === void 0 || rows === items;
     if (sameSpacing && items !== void 0) properties["gap-".concat(items)] = true;
     if (!sameSpacing && items !== void 0) properties["gap-horizontal-".concat(items)] = true;
@@ -1282,7 +1331,13 @@
       return {
         properties: {},
         errors: [
-          { nodeId: node.id, layer: truncateName(node.name), property: "AUTO LAYOUT", problem: "missing", always: true }
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "AUTO LAYOUT",
+            problem: "missing",
+            value: formatValue(node.layoutMode)
+          }
         ],
         warnings: []
       };
@@ -1298,14 +1353,20 @@
     const errors = [];
     const { paddingLeft: left, paddingRight: right, paddingTop: top, paddingBottom: bottom } = node;
     const bound = node.boundVariables;
-    const addClass = async (prefix, label, alias) => {
+    const addClass = async (prefix, label, value, alias) => {
       if (alias === void 0) return;
       const className = await resolveBoundUnitClass(prefix, alias);
       if (className) {
         properties[className] = true;
         return;
       }
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not a token" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "".concat(label),
+        problem: "not a token",
+        value: formatValue(value)
+      });
     };
     const horizontalPair = left === right && left > 0;
     const horizontalBound = (bound == null ? void 0 : bound.paddingLeft) !== void 0 && (bound == null ? void 0 : bound.paddingRight) !== void 0;
@@ -1318,34 +1379,67 @@
         nodeId: node.id,
         layer: truncateName(node.name),
         property: "PADDING HORIZONTAL",
-        problem: "not bound"
+        problem: "not bound",
+        value: formatValue(left)
       });
     }
     if (verticalPair && !verticalBound) {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING VERTICAL", problem: "not bound" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "PADDING VERTICAL",
+        problem: "not bound",
+        value: formatValue(top)
+      });
     }
     if (paddingHorizontal === 0 && left > 0 && (bound == null ? void 0 : bound.paddingLeft) === void 0) {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING LEFT", problem: "not bound" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "PADDING LEFT",
+        problem: "not bound",
+        value: formatValue(left)
+      });
     }
     if (paddingHorizontal === 0 && right > 0 && (bound == null ? void 0 : bound.paddingRight) === void 0) {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING RIGHT", problem: "not bound" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "PADDING RIGHT",
+        problem: "not bound",
+        value: formatValue(right)
+      });
     }
     if (paddingVertical === 0 && top > 0 && (bound == null ? void 0 : bound.paddingTop) === void 0) {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING TOP", problem: "not bound" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "PADDING TOP",
+        problem: "not bound",
+        value: formatValue(top)
+      });
     }
     if (paddingVertical === 0 && bottom > 0 && (bound == null ? void 0 : bound.paddingBottom) === void 0) {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "PADDING BOTTOM", problem: "not bound" });
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "PADDING BOTTOM",
+        problem: "not bound",
+        value: formatValue(bottom)
+      });
     }
     if (paddingHorizontal > 0 && paddingHorizontal === paddingVertical) {
-      await addClass("padding-", "PADDING", bound == null ? void 0 : bound.paddingLeft);
+      await addClass("padding-", "PADDING", left, bound == null ? void 0 : bound.paddingLeft);
       return { properties, errors, warnings: [] };
     }
-    if (paddingHorizontal > 0) await addClass("padding-horizontal-", "PADDING HORIZONTAL", bound == null ? void 0 : bound.paddingLeft);
-    if (paddingHorizontal === 0 && left > 0) await addClass("padding-left-", "PADDING LEFT", bound == null ? void 0 : bound.paddingLeft);
-    if (paddingHorizontal === 0 && right > 0) await addClass("padding-right-", "PADDING RIGHT", bound == null ? void 0 : bound.paddingRight);
-    if (paddingVertical > 0) await addClass("padding-vertical-", "PADDING VERTICAL", bound == null ? void 0 : bound.paddingTop);
-    if (paddingVertical === 0 && top > 0) await addClass("padding-top-", "PADDING TOP", bound == null ? void 0 : bound.paddingTop);
-    if (paddingVertical === 0 && bottom > 0) await addClass("padding-bottom-", "PADDING BOTTOM", bound == null ? void 0 : bound.paddingBottom);
+    if (paddingHorizontal > 0) await addClass("padding-horizontal-", "PADDING HORIZONTAL", left, bound == null ? void 0 : bound.paddingLeft);
+    if (paddingHorizontal === 0 && left > 0) await addClass("padding-left-", "PADDING LEFT", left, bound == null ? void 0 : bound.paddingLeft);
+    if (paddingHorizontal === 0 && right > 0)
+      await addClass("padding-right-", "PADDING RIGHT", right, bound == null ? void 0 : bound.paddingRight);
+    if (paddingVertical > 0) await addClass("padding-vertical-", "PADDING VERTICAL", top, bound == null ? void 0 : bound.paddingTop);
+    if (paddingVertical === 0 && top > 0) await addClass("padding-top-", "PADDING TOP", top, bound == null ? void 0 : bound.paddingTop);
+    if (paddingVertical === 0 && bottom > 0)
+      await addClass("padding-bottom-", "PADDING BOTTOM", bottom, bound == null ? void 0 : bound.paddingBottom);
     return { properties, errors, warnings: [] };
   };
 
@@ -1424,7 +1518,15 @@
     if (node.textStyleId === "") {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "TYPOGRAPHY", problem: "not bound" }],
+        errors: [
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "TYPOGRAPHY",
+            problem: "not bound",
+            value: node.fontSize === figma.mixed ? void 0 : formatValue(node.fontSize)
+          }
+        ],
         warnings: []
       };
     }
@@ -1445,7 +1547,8 @@
             nodeId: node.id,
             layer: truncateName(node.name),
             property: "TYPOGRAPHY",
-            problem: "not a token (".concat((_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.textStyleId, ")")
+            problem: "not a token",
+            value: (_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.textStyleId
           }
         ],
         warnings: []
@@ -1491,7 +1594,8 @@
           nodeId: node.id,
           layer: truncateName(node.name),
           property: "LAYER",
-          problem: "unsupported (".concat(node.type, ")")
+          problem: "unsupported",
+          value: formatValue(node.type)
         },
         ...reads.flatMap((read) => read.warnings)
       ]
@@ -1521,14 +1625,16 @@
         nodeId: box.id,
         layer: truncateName(box.name),
         property: "WIDTH",
-        problem: "not bound"
+        problem: "not bound",
+        value: formatValue(box.width)
       });
     } else if (width === void 0) {
       errors.push({
         nodeId: box.id,
         layer: truncateName(box.name),
         property: "WIDTH",
-        problem: "not a token"
+        problem: "not a token",
+        value: formatValue(box.width)
       });
     }
     if (!(bound == null ? void 0 : bound.height)) {
@@ -1536,14 +1642,16 @@
         nodeId: box.id,
         layer: truncateName(box.name),
         property: "HEIGHT",
-        problem: "not bound"
+        problem: "not bound",
+        value: formatValue(box.height)
       });
     } else if (height === void 0) {
       errors.push({
         nodeId: box.id,
         layer: truncateName(box.name),
         property: "HEIGHT",
-        problem: "not a token"
+        problem: "not a token",
+        value: formatValue(box.height)
       });
     }
     const minX = box === node ? 0 : box.x - node.x;
@@ -1567,6 +1675,7 @@
     return definitionLayer !== null && "annotations" in definitionLayer && hasExcludeFromOutputAnnotation(definitionLayer.annotations, annotationCategories);
   };
   var isInFrame = (node) => node.parent !== null && node.parent.type !== "PAGE" && node.parent.type !== "SECTION" && node.parent.type !== "DOCUMENT";
+  var isSizeError = (error) => error.property === "WIDTH" || error.property === "HEIGHT";
   var serializeLayer = async (node) => {
     var _a3, _b, _c, _d;
     switch (node.type) {
@@ -1610,9 +1719,9 @@
         };
       }
       const r = await serializeLayer(node);
-      if (!isInFrame(node) && r.errors.length > 0) {
-        r.warnings = [...r.errors.filter((error) => !error.always), ...r.warnings];
-        r.errors = r.errors.filter((error) => error.always);
+      if (!isInFrame(node)) {
+        r.warnings = [...r.errors.filter(isSizeError), ...r.warnings];
+        r.errors = r.errors.filter((error) => !isSizeError(error));
       }
       const children = "children" in node ? node.children : [];
       if (r.properties.type !== "VECTOR" && children.length > 0) {

@@ -9,13 +9,13 @@ import { readLayout } from "../read/layout"
 import { readPadding } from "../read/padding"
 import { readStroke } from "../read/stroke"
 import type { PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
+import { formatValue, truncateName } from "../utilities"
 
 const EMPTY: PropertiesErrorOrWarning = { properties: {}, errors: [], warnings: [] }
 
 /**
  * Any layer the library has no component for (rectangle, ellipse, line, star, polygon, boolean operation, slice,
- * section, component, instance, ...). It is reported as unsupported and rendered as a Frame from whatever settings it
+ * section, component, instance, ...). It is reported as unsupported and rendered as `This` with whatever settings it
  * has, so its size, fill, stroke and corners survive; component and instance wrappers render only their children.
  */
 export const serializeUnsupported = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
@@ -25,7 +25,7 @@ export const serializeUnsupported = async (node: SceneNode): Promise<PropertiesE
   const alignment = "layoutMode" in node ? readAlignmentFrame(node) : EMPTY
   const gap = "itemSpacing" in node ? await readGap(node) : EMPTY
   const padding = "paddingLeft" in node ? await readPadding(node) : EMPTY
-  // An ellipse's corner radius only rounds its arcs; it renders fully rounded instead.
+  // An ellipse's corner radius only rounds its arcs; it is read as fully rounded instead.
   const cornerRadius = node.type !== "ELLIPSE" && "cornerSmoothing" in node ? await readCornerRadius(node) : EMPTY
   const fill = "fills" in node ? await readFill(node) : EMPTY
   const stroke = "strokes" in node ? await readStroke(node) : EMPTY
@@ -49,7 +49,8 @@ export const serializeUnsupported = async (node: SceneNode): Promise<PropertiesE
         nodeId: node.id,
         layer: truncateName(node.name),
         property: "LAYER",
-        problem: `unsupported (${node.type})`,
+        problem: "unsupported",
+        value: formatValue(node.type),
       },
       ...reads.flatMap((read) => read.warnings),
     ],

@@ -1,4 +1,4 @@
-import type { PropertiesErrorOrWarning } from "../types"
+import type { ErrorOrWarning, PropertiesErrorOrWarning } from "../types"
 import { getMainDefinitionLayerForNode, hasExcludeFromOutputAnnotation } from "./annotationExclude"
 import { serializeFrame } from "./frame"
 import { serializeGroup } from "./group"
@@ -29,6 +29,8 @@ const isInFrame = (node: SceneNode): boolean =>
   node.parent.type !== "PAGE" &&
   node.parent.type !== "SECTION" &&
   node.parent.type !== "DOCUMENT"
+
+const isSizeError = (error: ErrorOrWarning): boolean => error.property === "WIDTH" || error.property === "HEIGHT"
 
 const serializeLayer = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
   switch (node.type) {
@@ -85,11 +87,11 @@ export const serializeNode = async (root: SceneNode): Promise<PropertiesErrorOrW
 
     const r = await serializeLayer(node)
 
-    // A top-level layer (its parent is the page or a section, not a frame) reports its own errors as notices, except
-    // the ones that always stay errors (missing auto layout).
-    if (!isInFrame(node) && r.errors.length > 0) {
-      r.warnings = [...r.errors.filter((error) => !error.always), ...r.warnings]
-      r.errors = r.errors.filter((error) => error.always)
+    // A top-level layer (its parent is the page or a section, not a frame) has no parent to size against, so its width
+    // and height errors are notices; its other errors stay errors.
+    if (!isInFrame(node)) {
+      r.warnings = [...r.errors.filter(isSizeError), ...r.warnings]
+      r.errors = r.errors.filter((error) => !isSizeError(error))
     }
 
     const children = "children" in node ? node.children : []

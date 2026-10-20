@@ -1,6 +1,6 @@
 import { HEIGHT_SIZING, WIDTH_SIZING } from "../maps"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
+import { formatValue, truncateName } from "../utilities"
 import { resolveBoundUnitClass, resolveBoundWidthClass } from "./unit"
 
 /** One side's flag: a bound unit token when fixed, else its sizing mode, or an error when it is neither. */
@@ -8,6 +8,7 @@ const readSize = async (
   node: SceneNode,
   label: "WIDTH" | "HEIGHT",
   sizing: string,
+  size: number,
   bound: VariableAlias | undefined,
   resolveFixedClass: (bound: VariableAlias) => Promise<string | undefined>,
   sizingFlags: Record<string, string>,
@@ -17,14 +18,26 @@ const readSize = async (
     const className = await resolveFixedClass(bound)
 
     if (className === undefined) {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not a token" })
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: `${label}`,
+        problem: "not a token",
+        value: formatValue(size),
+      })
     }
 
     return className
   }
 
   if (sizing === "FIXED") {
-    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not bound" })
+    errors.push({
+      nodeId: node.id,
+      layer: truncateName(node.name),
+      property: `${label}`,
+      problem: "not bound",
+      value: formatValue(size),
+    })
 
     return undefined
   }
@@ -35,6 +48,7 @@ const readSize = async (
       layer: truncateName(node.name),
       property: `${label}`,
       problem: "must be fill or hug",
+      value: formatValue(sizing),
     })
 
     return undefined
@@ -51,6 +65,7 @@ export const readDimensions = async (node: SceneNode & LayoutMixin): Promise<Pro
     node,
     "WIDTH",
     node.layoutSizingHorizontal,
+    node.width,
     node.boundVariables?.width,
     resolveBoundWidthClass,
     WIDTH_SIZING,
@@ -60,6 +75,7 @@ export const readDimensions = async (node: SceneNode & LayoutMixin): Promise<Pro
     node,
     "HEIGHT",
     node.layoutSizingVertical,
+    node.height,
     node.boundVariables?.height,
     (bound) => resolveBoundUnitClass("height-", bound),
     HEIGHT_SIZING,

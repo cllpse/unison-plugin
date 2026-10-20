@@ -2,7 +2,7 @@ import { readFill } from "../read/fill"
 import { readIdentity } from "../read/identity"
 import { resolveBoundUnitClass } from "../read/unit"
 import type { ErrorOrWarning, PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
+import { formatValue, truncateName } from "../utilities"
 
 // Figma emits path data with up to 4 decimals per coordinate; 2 keeps icons crisp at any size while keeping the
 // generated JSX short.
@@ -44,6 +44,7 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
       layer: truncateName(box.name),
       property: "WIDTH",
       problem: "not bound",
+      value: formatValue(box.width),
     })
   } else if (width === undefined) {
     errors.push({
@@ -51,6 +52,7 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
       layer: truncateName(box.name),
       property: "WIDTH",
       problem: "not a token",
+      value: formatValue(box.width),
     })
   }
 
@@ -60,6 +62,7 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
       layer: truncateName(box.name),
       property: "HEIGHT",
       problem: "not bound",
+      value: formatValue(box.height),
     })
   } else if (height === undefined) {
     errors.push({
@@ -67,6 +70,7 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
       layer: truncateName(box.name),
       property: "HEIGHT",
       problem: "not a token",
+      value: formatValue(box.height),
     })
   }
 

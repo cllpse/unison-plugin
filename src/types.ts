@@ -4,8 +4,8 @@ export type ErrorOrWarning = {
   layer: string
   property: string
   problem: string
-  /** Stays an error even on a top-level layer, where other errors become notices. */
-  always?: boolean
+  /** The property's current value, shown in parentheses after the problem. */
+  value?: string | number
 }
 
 export type PropertiesErrorOrWarning = {

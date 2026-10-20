@@ -1,16 +1,23 @@
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
+import { formatValue, truncateName } from "../utilities"
 import { resolveBoundUnitClass } from "./unit"
 
 /** A gap's flag suffix (`4`, `px`) from its bound variable, or an error when it isn't bound to a unit token. */
 const readSpacing = async (
   node: SceneNode,
   label: string,
+  value: number,
   bound: VariableAlias | undefined,
   errors: ErrorOrWarning[],
 ): Promise<string | undefined> => {
   if (bound === undefined) {
-    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not bound" })
+    errors.push({
+      nodeId: node.id,
+      layer: truncateName(node.name),
+      property: `${label}`,
+      problem: "not bound",
+      value: formatValue(value),
+    })
 
     return undefined
   }
@@ -18,7 +25,13 @@ const readSpacing = async (
   const suffix = await resolveBoundUnitClass("", bound)
 
   if (suffix === undefined) {
-    errors.push({ nodeId: node.id, layer: truncateName(node.name), property: `${label}`, problem: "not a token" })
+    errors.push({
+      nodeId: node.id,
+      layer: truncateName(node.name),
+      property: `${label}`,
+      problem: "not a token",
+      value: formatValue(value),
+    })
   }
 
   return suffix
@@ -31,12 +44,14 @@ export const readGap = async (node: SceneNode & AutoLayoutMixin): Promise<Proper
   const errors: ErrorOrWarning[] = []
 
   const items =
-    node.itemSpacing > 0 ? await readSpacing(node, "GAP", node.boundVariables?.itemSpacing, errors) : undefined
+    node.itemSpacing > 0
+      ? await readSpacing(node, "GAP", node.itemSpacing, node.boundVariables?.itemSpacing, errors)
+      : undefined
 
   const rowSpacing = node.layoutWrap === "WRAP" ? node.counterAxisSpacing : null
   const rows =
     rowSpacing !== null && rowSpacing > 0
-      ? await readSpacing(node, "GAP VERTICAL", node.boundVariables?.counterAxisSpacing, errors)
+      ? await readSpacing(node, "GAP VERTICAL", rowSpacing, node.boundVariables?.counterAxisSpacing, errors)
       : undefined
 
   const sameSpacing = rows === undefined || rows === items

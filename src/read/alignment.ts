@@ -1,6 +1,6 @@
 import type { FigmaFrameAlignment, FigmaTypographyAlignment } from "../../unison-components/types/figma"
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
+import { formatValue, truncateName } from "../utilities"
 
 const FRAME_ALIGNMENT: Record<string, keyof FigmaFrameAlignment> = {
   HORIZONTAL_MIN_MIN: "alignment-top-left",
@@ -70,6 +70,7 @@ export const readAlignmentText = (node: TextNode): PropertiesErrorOrWarning => {
         layer: truncateName(node.name),
         property: "TEXT ALIGNMENT",
         problem: "must be left, center or right",
+        value: formatValue(alignment),
       },
     ],
     warnings: [],

@@ -1,6 +1,6 @@
 import type { FigmaFrameAutolayout } from "../../unison-components/types/figma"
 import type { Properties, PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
+import { formatValue, truncateName } from "../utilities"
 
 const LAYOUT_MODE_FLAGS: Record<string, keyof FigmaFrameAutolayout> = {
   HORIZONTAL: "autolayout-horizontal",
@@ -14,7 +14,13 @@ export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOr
     return {
       properties: {},
       errors: [
-        { nodeId: node.id, layer: truncateName(node.name), property: "AUTO LAYOUT", problem: "missing", always: true },
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "AUTO LAYOUT",
+          problem: "missing",
+          value: formatValue(node.layoutMode),
+        },
       ],
       warnings: [],
     }

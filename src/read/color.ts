@@ -1,6 +1,6 @@
 import { resolveColorToken } from "../maps"
 import type { PropertiesErrorOrWarning } from "../types"
-import { RGBToHEX, truncateName } from "../utilities"
+import { formatValue, RGBToHEX, truncateName } from "../utilities"
 import { getVariable } from "./variable"
 
 const resolveBoundPaintColor = async (
@@ -33,7 +33,8 @@ export const readPaint = async (
           nodeId: node.id,
           layer: truncateName(node.name),
           property: `${kind}`,
-          problem: `unsupported (${paint.type})`,
+          problem: "unsupported",
+          value: formatValue(paint.type),
         },
       ],
       warnings: [],
@@ -43,27 +44,37 @@ export const readPaint = async (
   if (paint.boundVariables?.color === undefined) {
     return {
       properties: {},
-      errors: [{ nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: "not bound" }],
+      errors: [
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: `${kind}`,
+          problem: "not bound",
+          value: RGBToHEX(paint.color),
+        },
+      ],
       warnings: [],
     }
   }
+
+  const { className, label } = await resolveBoundPaintColor(`${name}-`, paint)
 
   if (!paint.visible) {
     return {
       properties: {},
       errors: [],
-      warnings: [{ nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: "hidden" }],
+      warnings: [
+        { nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: "hidden", value: label },
+      ],
     }
   }
-
-  const { className, label } = await resolveBoundPaintColor(`${name}-`, paint)
 
   if (className) return { properties: { [className]: true }, errors: [], warnings: [] }
 
   return {
     properties: {},
     errors: [
-      { nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: `not a token (${label})` },
+      { nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: "not a token", value: label },
     ],
     warnings: [],
   }

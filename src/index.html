@@ -454,7 +454,7 @@
       const toSentenceCase = (text) => `${text.charAt(0)}${text.slice(1).toLowerCase()}`
 
       const renderIssue = (issue, severity) =>
-        `<p class="${severity}" data-id="${issue.nodeId}">${issue.layer} <span class="property">${toSentenceCase(issue.property)}</span> ${issue.problem}</p>`
+        `<p class="${severity}" data-id="${issue.nodeId}">${issue.layer} <span class="property">${toSentenceCase(issue.property)}</span> ${issue.problem}${issue.value === undefined ? "" : ` (${issue.value})`}</p>`
 
       const renderIssues = (errors, warnings, nothingSelected = false) => {
         let html = `<p class="title">Issues</p>`

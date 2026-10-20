@@ -1,5 +1,5 @@
 import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
+import { formatValue, truncateName } from "../utilities"
 import { resolveBoundRadiusClass } from "./unit"
 
 type DiscreteCorner = {
@@ -12,11 +12,12 @@ type DiscreteCorner = {
 const hasDiscreteCorners = (node: SceneNode & CornerMixin): node is SceneNode & CornerMixin & RectangleCornerMixin =>
   "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node
 
-const getCornerError = (node: SceneNode, problem: string, label?: string): ErrorOrWarning => ({
+const getCornerError = (node: SceneNode, problem: string, value: number, label?: string): ErrorOrWarning => ({
   nodeId: node.id,
   layer: truncateName(node.name),
   property: label ? `CORNER RADIUS ${label}` : "CORNER RADIUS",
   problem,
+  value: formatValue(value),
 })
 
 const emitCorner = async (
@@ -29,7 +30,7 @@ const emitCorner = async (
   label?: string,
 ) => {
   if (value > 0 && bound === undefined) {
-    errors.push(getCornerError(node, "not bound", label))
+    errors.push(getCornerError(node, "not bound", value, label))
 
     return
   }
@@ -49,7 +50,7 @@ const emitCorner = async (
     return
   }
 
-  errors.push(getCornerError(node, "not a token", label))
+  errors.push(getCornerError(node, "not a token", value, label))
 }
 
 const readDiscreteCorners = async (
@@ -104,7 +105,7 @@ const readDiscreteCorners = async (
   if (baseCount === 4 && baseValue <= 0) return { properties, errors, warnings: [] }
 
   if (baseCount === 4 && corners.some((corner) => corner.bound === undefined)) {
-    errors.push(getCornerError(node, "not bound"))
+    errors.push(getCornerError(node, "not bound", baseValue))
 
     return { properties, errors, warnings: [] }
   }

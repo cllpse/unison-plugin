@@ -100,11 +100,13 @@ const formatOpenTag = (
   return lines.join("\n")
 }
 
+/** An unsupported layer renders as `This`, a tag the library doesn't have, so it stands out as something to replace. */
 const resolveTag = (properties: Record<string, unknown>): string => {
   if (properties.type === "TEXT") return "Text"
   if (properties.type === "VECTOR") return "Vector"
+  if (properties.type === "FRAME" || properties.type === "GROUP") return "Frame"
 
-  return "Frame"
+  return "This"
 }
 
 const renderChildren = (children: PropertiesErrorOrWarning[], indentation: string): string =>
@@ -125,7 +127,7 @@ const renderNode = (node: PropertiesErrorOrWarning, indentation: string): string
   if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation)
   if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation)
 
-  const selfClosing = tag === "Vector"
+  const selfClosing = tag === "Vector" || (tag === "This" && children.length === 0)
   const open = formatOpenTag(tag, properties, indentation, selfClosing)
 
   if (selfClosing) return open
@@ -138,6 +140,14 @@ const renderNode = (node: PropertiesErrorOrWarning, indentation: string): string
 }
 
 export const renderComponentCode = (json: PropertiesErrorOrWarning): string => renderNode(json, "")
+
+/**
+ * A Figma value as it reads in an Issues line: numbers to at most 2 decimals, enums in lower case.
+ * @example formatValue(12.3456) // 12.35
+ * @example formatValue("BOOLEAN_OPERATION") // "boolean operation"
+ */
+export const formatValue = (value: number | string): string | number =>
+  typeof value === "number" ? Math.round(value * 100) / 100 : value.toLowerCase().replace(/_/g, " ")
 
 const MAX_NAME_LENGTH = 15
 
