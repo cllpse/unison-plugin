@@ -309,6 +309,170 @@
     return definition;
   };
 
+  // src/utilities.ts
+  var toHex = (n) => {
+    const clamped = Math.max(0, Math.min(255, Math.round(n)));
+    const hex = clamped.toString(16).toUpperCase();
+    return hex.length === 1 ? "0".concat(hex) : hex;
+  };
+  var RGBToHEX = (rgb) => "#".concat(toHex(rgb.r * 255)).concat(toHex(rgb.g * 255)).concat(toHex(rgb.b * 255));
+  var INDENT = " ".repeat(4);
+  var META_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "children", "characters"]);
+  var STRING_PROP_KEYS = {
+    Vector: ["path", "viewBox", "fillRule"]
+  };
+  var PANEL_ORDER = [
+    "autolayout-",
+    "wrap",
+    "width-",
+    "height-",
+    "alignment-",
+    "gap-",
+    "gap-horizontal-",
+    "gap-vertical-",
+    "padding-",
+    "padding-horizontal-",
+    "padding-vertical-",
+    "padding-left-",
+    "padding-top-",
+    "padding-right-",
+    "padding-bottom-",
+    "corner-radius-",
+    "corner-radius-top-left-",
+    "corner-radius-top-right-",
+    "corner-radius-bottom-right-",
+    "corner-radius-bottom-left-",
+    "typography-",
+    "typography-align-",
+    "typography-decoration-",
+    "fill-",
+    "fill-hover-",
+    "stroke-",
+    "stroke-style-",
+    "stroke-hover-",
+    "effect-"
+  ];
+  var getPanelRank = (flag) => {
+    let rank = PANEL_ORDER.length;
+    let length = 0;
+    for (const [i, prefix] of PANEL_ORDER.entries()) {
+      if (flag.startsWith(prefix) && prefix.length > length) {
+        rank = i;
+        length = prefix.length;
+      }
+    }
+    return rank;
+  };
+  var compareByPanelOrder = (a, b) => getPanelRank(a) - getPanelRank(b) || a.localeCompare(b);
+  var SKIP_WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
+  var getFlagKeys = (properties) => Object.keys(properties).filter((k) => !META_KEYS.has(k) && properties[k] === true);
+  var formatOpenTag = (tag, properties, indentation, selfClosing) => {
+    var _a3;
+    const flags = getFlagKeys(properties).sort(compareByPanelOrder);
+    const attributes = ((_a3 = STRING_PROP_KEYS[tag]) != null ? _a3 : []).filter((k) => typeof properties[k] === "string").map((k) => "".concat(k, '="').concat(properties[k], '"'));
+    const keys = [...flags, ...attributes];
+    if (keys.length === 0) return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
+    const lines = [
+      "".concat(indentation, "<").concat(tag),
+      ...keys.map((k) => "".concat(indentation, "  ").concat(k)),
+      selfClosing ? "".concat(indentation, "/>") : "".concat(indentation, ">")
+    ];
+    return lines.join("\n");
+  };
+  var resolveTag = (properties) => {
+    if (properties.type === "TEXT") return "Text";
+    if (properties.type === "VECTOR") return "Vector";
+    return "Frame";
+  };
+  var renderChildren = (children, indentation) => children.map((child) => renderNode(child, indentation)).filter((part) => part.length > 0).join("\n");
+  var renderNode = (node, indentation) => {
+    var _a3;
+    const { properties } = node;
+    if (properties.EXCLUDE_FROM_OUTPUT === true) return "";
+    const tag = resolveTag(properties);
+    const children = (_a3 = properties.children) != null ? _a3 : [];
+    const type = properties.type;
+    if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation);
+    if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation);
+    const selfClosing = tag === "Vector";
+    const open = formatOpenTag(tag, properties, indentation, selfClosing);
+    if (selfClosing) return open;
+    if (tag === "Text")
+      return [open, "".concat(indentation).concat(INDENT).concat(properties.characters), "".concat(indentation, "</Text>")].join("\n");
+    const inner = renderChildren(children, "".concat(indentation).concat(INDENT));
+    return [open, ...inner.length > 0 ? [inner] : [], "".concat(indentation, "</").concat(tag, ">")].join("\n");
+  };
+  var renderComponentCode = (json) => renderNode(json, "");
+  var MAX_NAME_LENGTH = 15;
+  var truncateName = (name) => name.length > MAX_NAME_LENGTH ? "".concat(name.slice(0, MAX_NAME_LENGTH), "\u2026") : name;
+
+  // src/read/alignment.ts
+  var FRAME_ALIGNMENT = {
+    HORIZONTAL_MIN_MIN: "alignment-top-left",
+    HORIZONTAL_MIN_CENTER: "alignment-left",
+    HORIZONTAL_MIN_MAX: "alignment-bottom-left",
+    HORIZONTAL_MIN_BASELINE: "alignment-top-left",
+    HORIZONTAL_CENTER_MIN: "alignment-top-center",
+    HORIZONTAL_CENTER_CENTER: "alignment-center",
+    HORIZONTAL_CENTER_MAX: "alignment-bottom-center",
+    HORIZONTAL_CENTER_BASELINE: "alignment-top-center",
+    HORIZONTAL_MAX_MIN: "alignment-top-right",
+    HORIZONTAL_MAX_CENTER: "alignment-right",
+    HORIZONTAL_MAX_MAX: "alignment-bottom-right",
+    HORIZONTAL_MAX_BASELINE: "alignment-top-right",
+    HORIZONTAL_SPACE_BETWEEN_MIN: "alignment-top-center",
+    HORIZONTAL_SPACE_BETWEEN_CENTER: "alignment-center",
+    HORIZONTAL_SPACE_BETWEEN_MAX: "alignment-bottom-center",
+    HORIZONTAL_SPACE_BETWEEN_BASELINE: "alignment-top-center",
+    VERTICAL_MIN_MIN: "alignment-top-left",
+    VERTICAL_MIN_CENTER: "alignment-top-center",
+    VERTICAL_MIN_MAX: "alignment-top-right",
+    VERTICAL_MIN_BASELINE: "alignment-top-left",
+    VERTICAL_CENTER_MIN: "alignment-left",
+    VERTICAL_CENTER_CENTER: "alignment-center",
+    VERTICAL_CENTER_MAX: "alignment-right",
+    VERTICAL_CENTER_BASELINE: "alignment-left",
+    VERTICAL_MAX_MIN: "alignment-bottom-left",
+    VERTICAL_MAX_CENTER: "alignment-bottom-center",
+    VERTICAL_MAX_MAX: "alignment-bottom-right",
+    VERTICAL_MAX_BASELINE: "alignment-bottom-left",
+    VERTICAL_SPACE_BETWEEN_MIN: "alignment-left",
+    VERTICAL_SPACE_BETWEEN_CENTER: "alignment-center",
+    VERTICAL_SPACE_BETWEEN_MAX: "alignment-right",
+    VERTICAL_SPACE_BETWEEN_BASELINE: "alignment-left"
+  };
+  var readAlignmentFrame = (node) => {
+    const properties = {};
+    const errors = [];
+    if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
+      properties[FRAME_ALIGNMENT["".concat(node.layoutMode, "_").concat(node.primaryAxisAlignItems, "_").concat(node.counterAxisAlignItems)]] = true;
+    }
+    return { properties, errors, warnings: [] };
+  };
+  var TEXT_ALIGNMENT = {
+    LEFT: "typography-align-left",
+    CENTER: "typography-align-center",
+    RIGHT: "typography-align-right"
+  };
+  var readAlignmentText = (node) => {
+    const alignment = node.textAlignHorizontal;
+    if (alignment === "LEFT" || alignment === "CENTER" || alignment === "RIGHT") {
+      return { properties: { [TEXT_ALIGNMENT[alignment]]: true }, errors: [], warnings: [] };
+    }
+    return {
+      properties: {},
+      errors: [
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "TEXT ALIGNMENT",
+          problem: "must be left, center or right"
+        }
+      ],
+      warnings: []
+    };
+  };
+
   // unison-components/dist/design-tokens.ts
   var COLORS = {
     currentcolor: "currentColor",
@@ -785,109 +949,6 @@
   var WIDTH_SIZING = buildSizingMap("width-");
   var HEIGHT_SIZING = buildSizingMap("height-");
 
-  // src/utilities.ts
-  var toHex = (n) => {
-    const clamped = Math.max(0, Math.min(255, Math.round(n)));
-    const hex = clamped.toString(16).toUpperCase();
-    return hex.length === 1 ? "0".concat(hex) : hex;
-  };
-  var RGBToHEX = (rgb) => "#".concat(toHex(rgb.r * 255)).concat(toHex(rgb.g * 255)).concat(toHex(rgb.b * 255));
-  var INDENT = " ".repeat(4);
-  var META_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "children", "characters"]);
-  var STRING_PROP_KEYS = {
-    Vector: ["path", "viewBox", "fillRule"]
-  };
-  var PANEL_ORDER = [
-    "autolayout-",
-    "wrap",
-    "width-",
-    "height-",
-    "alignment-",
-    "gap-",
-    "gap-horizontal-",
-    "gap-vertical-",
-    "padding-",
-    "padding-horizontal-",
-    "padding-vertical-",
-    "padding-left-",
-    "padding-top-",
-    "padding-right-",
-    "padding-bottom-",
-    "corner-radius-",
-    "corner-radius-top-left-",
-    "corner-radius-top-right-",
-    "corner-radius-bottom-right-",
-    "corner-radius-bottom-left-",
-    "typography-",
-    "typography-align-",
-    "typography-decoration-",
-    "fill-",
-    "fill-hover-",
-    "stroke-",
-    "stroke-style-",
-    "stroke-hover-",
-    "effect-"
-  ];
-  var getPanelRank = (flag) => {
-    let rank = PANEL_ORDER.length;
-    let length = 0;
-    for (const [i, prefix] of PANEL_ORDER.entries()) {
-      if (flag.startsWith(prefix) && prefix.length > length) {
-        rank = i;
-        length = prefix.length;
-      }
-    }
-    return rank;
-  };
-  var compareByPanelOrder = (a, b) => getPanelRank(a) - getPanelRank(b) || a.localeCompare(b);
-  var SKIP_WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
-  var getFlagKeys = (properties) => Object.keys(properties).filter((k) => !META_KEYS.has(k) && properties[k] === true);
-  var formatOpenTag = (tag, properties, indentation, selfClosing) => {
-    var _a3;
-    const flags = getFlagKeys(properties).sort(compareByPanelOrder);
-    const attributes = ((_a3 = STRING_PROP_KEYS[tag]) != null ? _a3 : []).filter((k) => typeof properties[k] === "string").map((k) => "".concat(k, '="').concat(properties[k], '"'));
-    const keys = [...flags, ...attributes];
-    if (keys.length === 0) return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
-    const lines = [
-      "".concat(indentation, "<").concat(tag),
-      ...keys.map((k) => "".concat(indentation, "  ").concat(k)),
-      selfClosing ? "".concat(indentation, "/>") : "".concat(indentation, ">")
-    ];
-    return lines.join("\n");
-  };
-  var resolveTag = (properties) => {
-    if (properties.type === "TEXT") return "Text";
-    if (properties.type === "VECTOR") return "Vector";
-    if (properties.type === "ELLIPSE") return "Ellipse";
-    if (properties.type === "RECTANGLE") return "Rectangle";
-    return "Frame";
-  };
-  var renderChildren = (children, indentation) => children.map((child) => renderNode(child, indentation)).filter((part) => part.length > 0).join("\n");
-  var renderNode = (node, indentation) => {
-    var _a3;
-    const { properties } = node;
-    if (properties.EXCLUDE_FROM_OUTPUT === true) return "";
-    const tag = resolveTag(properties);
-    const children = (_a3 = properties.children) != null ? _a3 : [];
-    const type = properties.type;
-    if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation);
-    if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation);
-    const selfClosing = tag === "Ellipse" || tag === "Rectangle" || tag === "Vector";
-    const open = formatOpenTag(tag, properties, indentation, selfClosing);
-    if (selfClosing) return open;
-    if (tag === "Text")
-      return [open, "".concat(indentation).concat(INDENT).concat(properties.characters), "".concat(indentation, "</Text>")].join("\n");
-    const parts = [
-      open,
-      ...children.map((child) => renderNode(child, "".concat(indentation).concat(INDENT))),
-      "".concat(indentation, "</").concat(tag, ">")
-    ];
-    return parts.join("\n");
-  };
-  var renderComponentCode = (json) => renderNode(json, "");
-  var MAX_NAME_LENGTH = 15;
-  var truncateName = (name) => name.length > MAX_NAME_LENGTH ? "".concat(name.slice(0, MAX_NAME_LENGTH), "\u2026") : name;
-
   // src/read/variable.ts
   var VARIABLE_BY_ID_CACHE = /* @__PURE__ */ new Map();
   var getVariable = (id) => {
@@ -917,223 +978,6 @@
     const spacing = resolveSpacingToken(name);
     if (container !== void 0) return "width-".concat(container);
     return spacing === void 0 ? void 0 : "width-".concat(spacing);
-  };
-
-  // src/read/dimensions.ts
-  var readSize = async (node, label, sizing, bound, resolveFixedClass, sizingFlags, errors) => {
-    if (sizing === "FIXED" && bound) {
-      const className = await resolveFixedClass(bound);
-      if (className === void 0) {
-        errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not a token" });
-      }
-      return className;
-    }
-    if (sizing === "FIXED") {
-      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not bound" });
-      return void 0;
-    }
-    if (sizing !== "FILL" && sizing !== "HUG") {
-      errors.push({
-        nodeId: node.id,
-        layer: truncateName(node.name),
-        property: "".concat(label),
-        problem: "must be fill or hug"
-      });
-      return void 0;
-    }
-    return sizingFlags[sizing];
-  };
-  var readDimensions = async (node) => {
-    var _a3, _b;
-    const properties = {};
-    const errors = [];
-    const width = await readSize(
-      node,
-      "WIDTH",
-      node.layoutSizingHorizontal,
-      (_a3 = node.boundVariables) == null ? void 0 : _a3.width,
-      resolveBoundWidthClass,
-      WIDTH_SIZING,
-      errors
-    );
-    const height = await readSize(
-      node,
-      "HEIGHT",
-      node.layoutSizingVertical,
-      (_b = node.boundVariables) == null ? void 0 : _b.height,
-      (bound) => resolveBoundUnitClass("height-", bound),
-      HEIGHT_SIZING,
-      errors
-    );
-    if (width) properties[width] = true;
-    if (height) properties[height] = true;
-    return { properties, errors, warnings: [] };
-  };
-
-  // src/read/color.ts
-  var resolveBoundPaintColor = async (prefix, paint) => {
-    var _a3, _b, _c;
-    const id = (_b = (_a3 = paint.boundVariables) == null ? void 0 : _a3.color) == null ? void 0 : _b.id;
-    const variable = id ? await getVariable(id) : null;
-    const token = resolveColorToken(variable == null ? void 0 : variable.name);
-    const className = token === void 0 ? void 0 : "".concat(prefix).concat(token);
-    return { className, label: (_c = variable == null ? void 0 : variable.name) != null ? _c : RGBToHEX(paint.color) };
-  };
-  var readPaint = async (node, kind, paint) => {
-    var _a3;
-    const name = kind.toLowerCase();
-    if (paint === void 0) return { properties: {}, errors: [], warnings: [] };
-    if (paint.type !== "SOLID") {
-      return {
-        properties: {},
-        errors: [
-          {
-            nodeId: node.id,
-            layer: truncateName(node.name),
-            property: "".concat(kind),
-            problem: "unsupported (".concat(paint.type, ")")
-          }
-        ],
-        warnings: []
-      };
-    }
-    if (((_a3 = paint.boundVariables) == null ? void 0 : _a3.color) === void 0) {
-      return {
-        properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not bound" }],
-        warnings: []
-      };
-    }
-    if (!paint.visible) {
-      return {
-        properties: {},
-        errors: [],
-        warnings: [{ nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "hidden" }]
-      };
-    }
-    const { className, label } = await resolveBoundPaintColor("".concat(name, "-"), paint);
-    if (className) return { properties: { [className]: true }, errors: [], warnings: [] };
-    return {
-      properties: {},
-      errors: [
-        { nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not a token (".concat(label, ")") }
-      ],
-      warnings: []
-    };
-  };
-
-  // src/read/fill.ts
-  var readFill = async (node) => {
-    if (node.fills === figma.mixed) {
-      return {
-        properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "FILL", problem: "mixed" }],
-        warnings: []
-      };
-    }
-    return readPaint(node, "FILL", node.fills[0]);
-  };
-
-  // src/read/identity.ts
-  var readIdentity = (node) => {
-    return {
-      id: node.id,
-      type: node.type,
-      name: node.name
-    };
-  };
-
-  // src/read/stroke.ts
-  var readStroke = async (node) => {
-    if (node.strokes.length > 1) {
-      return {
-        properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "STROKE", problem: "mixed" }],
-        warnings: []
-      };
-    }
-    return readPaint(node, "STROKE", node.strokes[0]);
-  };
-
-  // src/serialize/ellipse.ts
-  var serializeEllipse = async (node) => {
-    const dimensions = await readDimensions(node);
-    const fill = await readFill(node);
-    const stroke = await readStroke(node);
-    return {
-      properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), dimensions.properties), fill.properties), stroke.properties), {
-        "corner-radius-full": true
-      }),
-      errors: [...dimensions.errors, ...fill.errors, ...stroke.errors],
-      warnings: [...dimensions.warnings, ...fill.warnings, ...stroke.warnings]
-    };
-  };
-
-  // src/read/alignment.ts
-  var FRAME_ALIGNMENT = {
-    HORIZONTAL_MIN_MIN: "alignment-top-left",
-    HORIZONTAL_MIN_CENTER: "alignment-left",
-    HORIZONTAL_MIN_MAX: "alignment-bottom-left",
-    HORIZONTAL_MIN_BASELINE: "alignment-top-left",
-    HORIZONTAL_CENTER_MIN: "alignment-top-center",
-    HORIZONTAL_CENTER_CENTER: "alignment-center",
-    HORIZONTAL_CENTER_MAX: "alignment-bottom-center",
-    HORIZONTAL_CENTER_BASELINE: "alignment-top-center",
-    HORIZONTAL_MAX_MIN: "alignment-top-right",
-    HORIZONTAL_MAX_CENTER: "alignment-right",
-    HORIZONTAL_MAX_MAX: "alignment-bottom-right",
-    HORIZONTAL_MAX_BASELINE: "alignment-top-right",
-    HORIZONTAL_SPACE_BETWEEN_MIN: "alignment-top-center",
-    HORIZONTAL_SPACE_BETWEEN_CENTER: "alignment-center",
-    HORIZONTAL_SPACE_BETWEEN_MAX: "alignment-bottom-center",
-    HORIZONTAL_SPACE_BETWEEN_BASELINE: "alignment-top-center",
-    VERTICAL_MIN_MIN: "alignment-top-left",
-    VERTICAL_MIN_CENTER: "alignment-top-center",
-    VERTICAL_MIN_MAX: "alignment-top-right",
-    VERTICAL_MIN_BASELINE: "alignment-top-left",
-    VERTICAL_CENTER_MIN: "alignment-left",
-    VERTICAL_CENTER_CENTER: "alignment-center",
-    VERTICAL_CENTER_MAX: "alignment-right",
-    VERTICAL_CENTER_BASELINE: "alignment-left",
-    VERTICAL_MAX_MIN: "alignment-bottom-left",
-    VERTICAL_MAX_CENTER: "alignment-bottom-center",
-    VERTICAL_MAX_MAX: "alignment-bottom-right",
-    VERTICAL_MAX_BASELINE: "alignment-bottom-left",
-    VERTICAL_SPACE_BETWEEN_MIN: "alignment-left",
-    VERTICAL_SPACE_BETWEEN_CENTER: "alignment-center",
-    VERTICAL_SPACE_BETWEEN_MAX: "alignment-right",
-    VERTICAL_SPACE_BETWEEN_BASELINE: "alignment-left"
-  };
-  var readAlignmentFrame = (node) => {
-    const properties = {};
-    const errors = [];
-    if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
-      properties[FRAME_ALIGNMENT["".concat(node.layoutMode, "_").concat(node.primaryAxisAlignItems, "_").concat(node.counterAxisAlignItems)]] = true;
-    }
-    return { properties, errors, warnings: [] };
-  };
-  var TEXT_ALIGNMENT = {
-    LEFT: "typography-align-left",
-    CENTER: "typography-align-center",
-    RIGHT: "typography-align-right"
-  };
-  var readAlignmentText = (node) => {
-    const alignment = node.textAlignHorizontal;
-    if (alignment === "LEFT" || alignment === "CENTER" || alignment === "RIGHT") {
-      return { properties: { [TEXT_ALIGNMENT[alignment]]: true }, errors: [], warnings: [] };
-    }
-    return {
-      properties: {},
-      errors: [
-        {
-          nodeId: node.id,
-          layer: truncateName(node.name),
-          property: "TEXT ALIGNMENT",
-          problem: "must be left, center or right"
-        }
-      ],
-      warnings: []
-    };
   };
 
   // src/read/cornerRadius.ts
@@ -1245,6 +1089,57 @@
     return { properties, errors, warnings: [] };
   };
 
+  // src/read/dimensions.ts
+  var readSize = async (node, label, sizing, bound, resolveFixedClass, sizingFlags, errors) => {
+    if (sizing === "FIXED" && bound) {
+      const className = await resolveFixedClass(bound);
+      if (className === void 0) {
+        errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not a token" });
+      }
+      return className;
+    }
+    if (sizing === "FIXED") {
+      errors.push({ nodeId: node.id, layer: truncateName(node.name), property: "".concat(label), problem: "not bound" });
+      return void 0;
+    }
+    if (sizing !== "FILL" && sizing !== "HUG") {
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "".concat(label),
+        problem: "must be fill or hug"
+      });
+      return void 0;
+    }
+    return sizingFlags[sizing];
+  };
+  var readDimensions = async (node) => {
+    var _a3, _b;
+    const properties = {};
+    const errors = [];
+    const width = await readSize(
+      node,
+      "WIDTH",
+      node.layoutSizingHorizontal,
+      (_a3 = node.boundVariables) == null ? void 0 : _a3.width,
+      resolveBoundWidthClass,
+      WIDTH_SIZING,
+      errors
+    );
+    const height = await readSize(
+      node,
+      "HEIGHT",
+      node.layoutSizingVertical,
+      (_b = node.boundVariables) == null ? void 0 : _b.height,
+      (bound) => resolveBoundUnitClass("height-", bound),
+      HEIGHT_SIZING,
+      errors
+    );
+    if (width) properties[width] = true;
+    if (height) properties[height] = true;
+    return { properties, errors, warnings: [] };
+  };
+
   // src/read/effect.ts
   var readEffect = async (node) => {
     var _a3;
@@ -1277,6 +1172,70 @@
     return { properties: { ["effect-shadow-".concat(token)]: true }, errors: [], warnings: [] };
   };
 
+  // src/read/color.ts
+  var resolveBoundPaintColor = async (prefix, paint) => {
+    var _a3, _b, _c;
+    const id = (_b = (_a3 = paint.boundVariables) == null ? void 0 : _a3.color) == null ? void 0 : _b.id;
+    const variable = id ? await getVariable(id) : null;
+    const token = resolveColorToken(variable == null ? void 0 : variable.name);
+    const className = token === void 0 ? void 0 : "".concat(prefix).concat(token);
+    return { className, label: (_c = variable == null ? void 0 : variable.name) != null ? _c : RGBToHEX(paint.color) };
+  };
+  var readPaint = async (node, kind, paint) => {
+    var _a3;
+    const name = kind.toLowerCase();
+    if (paint === void 0) return { properties: {}, errors: [], warnings: [] };
+    if (paint.type !== "SOLID") {
+      return {
+        properties: {},
+        errors: [
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "".concat(kind),
+            problem: "unsupported (".concat(paint.type, ")")
+          }
+        ],
+        warnings: []
+      };
+    }
+    if (((_a3 = paint.boundVariables) == null ? void 0 : _a3.color) === void 0) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not bound" }],
+        warnings: []
+      };
+    }
+    if (!paint.visible) {
+      return {
+        properties: {},
+        errors: [],
+        warnings: [{ nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "hidden" }]
+      };
+    }
+    const { className, label } = await resolveBoundPaintColor("".concat(name, "-"), paint);
+    if (className) return { properties: { [className]: true }, errors: [], warnings: [] };
+    return {
+      properties: {},
+      errors: [
+        { nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not a token (".concat(label, ")") }
+      ],
+      warnings: []
+    };
+  };
+
+  // src/read/fill.ts
+  var readFill = async (node) => {
+    if (node.fills === figma.mixed) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "FILL", problem: "mixed" }],
+        warnings: []
+      };
+    }
+    return readPaint(node, "FILL", node.fills[0]);
+  };
+
   // src/read/gap.ts
   var readSpacing = async (node, label, bound, errors) => {
     if (bound === void 0) {
@@ -1301,6 +1260,15 @@
     if (!sameSpacing && items !== void 0) properties["gap-horizontal-".concat(items)] = true;
     if (!sameSpacing) properties["gap-vertical-".concat(rows)] = true;
     return { properties, errors, warnings: [] };
+  };
+
+  // src/read/identity.ts
+  var readIdentity = (node) => {
+    return {
+      id: node.id,
+      type: node.type,
+      name: node.name
+    };
   };
 
   // src/read/layout.ts
@@ -1381,6 +1349,18 @@
     return { properties, errors, warnings: [] };
   };
 
+  // src/read/stroke.ts
+  var readStroke = async (node) => {
+    if (node.strokes.length > 1) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "STROKE", problem: "mixed" }],
+        warnings: []
+      };
+    }
+    return readPaint(node, "STROKE", node.strokes[0]);
+  };
+
   // src/serialize/frame.ts
   var serializeFrame = async (node) => {
     const alignment = readAlignmentFrame(node);
@@ -1434,28 +1414,7 @@
         children: node.children
       }),
       errors: [],
-      warnings: [
-        {
-          nodeId: node.id,
-          layer: truncateName(node.name),
-          property: "GROUP",
-          problem: "converted to frame"
-        }
-      ]
-    };
-  };
-
-  // src/serialize/rectangle.ts
-  var serializeRectangle = async (node) => {
-    const dimensions = await readDimensions(node);
-    const fill = await readFill(node);
-    const stroke = await readStroke(node);
-    const cornerRadius = await readCornerRadius(node);
-    return {
-      properties: __spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), dimensions.properties), fill.properties), stroke.properties), cornerRadius.properties),
-      // In the order of Figma's right panel, like the rendered flags.
-      errors: [...dimensions.errors, ...cornerRadius.errors, ...fill.errors, ...stroke.errors],
-      warnings: [...dimensions.warnings, ...cornerRadius.warnings, ...fill.warnings, ...stroke.warnings]
+      warnings: []
     };
   };
 
@@ -1511,32 +1470,22 @@
     };
   };
 
-  // src/serialize/unknown.ts
-  var serializeUnknown = async (node) => {
-    const alignment = readAlignmentFrame(node);
-    const cornerRadius = await readCornerRadius(node);
-    const dimensions = await readDimensions(node);
-    const fill = await readFill(node);
-    const gap = await readGap(node);
-    const layout = readLayout(node);
-    const padding = await readPadding(node);
-    const stroke = await readStroke(node);
+  // src/serialize/unsupported.ts
+  var EMPTY = { properties: {}, errors: [], warnings: [] };
+  var serializeUnsupported = async (node) => {
+    const layout = "layoutMode" in node ? readLayout(node) : EMPTY;
+    const dimensions = "layoutSizingHorizontal" in node ? await readDimensions(node) : EMPTY;
+    const alignment = "layoutMode" in node ? readAlignmentFrame(node) : EMPTY;
+    const gap = "itemSpacing" in node ? await readGap(node) : EMPTY;
+    const padding = "paddingLeft" in node ? await readPadding(node) : EMPTY;
+    const cornerRadius = node.type !== "ELLIPSE" && "cornerSmoothing" in node ? await readCornerRadius(node) : EMPTY;
+    const fill = "fills" in node ? await readFill(node) : EMPTY;
+    const stroke = "strokes" in node ? await readStroke(node) : EMPTY;
+    const effect = "effects" in node ? await readEffect(node) : EMPTY;
+    const reads = [layout, dimensions, alignment, gap, padding, cornerRadius, fill, stroke, effect];
     return {
-      properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), alignment.properties), cornerRadius.properties), dimensions.properties), fill.properties), gap.properties), layout.properties), padding.properties), stroke.properties), {
-        children: "children" in node ? node.children : []
-      }),
-      // Components, instances and other frame-like layers need auto layout too (reported by readLayout); other layers
-      // have none to report. The rest is in the order of Figma's right panel, like the rendered flags.
-      errors: [
-        ..."layoutMode" in node ? layout.errors : [],
-        ...dimensions.errors,
-        ...alignment.errors,
-        ...gap.errors,
-        ...padding.errors,
-        ...cornerRadius.errors,
-        ...fill.errors,
-        ...stroke.errors
-      ],
+      properties: __spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), Object.assign({}, ...reads.map((read) => read.properties))), node.type === "ELLIPSE" ? { "corner-radius-full": true } : {}),
+      errors: reads.flatMap((read) => read.errors),
       warnings: [
         {
           nodeId: node.id,
@@ -1544,14 +1493,7 @@
           property: "LAYER",
           problem: "unsupported (".concat(node.type, ")")
         },
-        ...layout.warnings,
-        ...dimensions.warnings,
-        ...alignment.warnings,
-        ...gap.warnings,
-        ...padding.warnings,
-        ...cornerRadius.warnings,
-        ...fill.warnings,
-        ...stroke.warnings
+        ...reads.flatMap((read) => read.warnings)
       ]
     };
   };
@@ -1641,16 +1583,10 @@
       }
       case "VECTOR":
         return serializeVector(node);
-      case "RECTANGLE":
-        return serializeRectangle(node);
-      case "ELLIPSE":
-        return serializeEllipse(node);
       case "TEXT":
         return serializeText(node);
       default:
-        return serializeUnknown(
-          node
-        );
+        return serializeUnsupported(node);
     }
   };
   var serializeNode = async (root) => {

@@ -1,7 +1,7 @@
 import { readIdentity } from "../read/identity"
 import type { PropertiesErrorOrWarning } from "../types"
-import { truncateName } from "../utilities"
 
+/** A group has no settings of its own; it renders as a Frame that stacks its layers and fills its parent. */
 export const serializeGroup = (node: GroupNode): PropertiesErrorOrWarning => {
   return {
     properties: {
@@ -16,13 +16,6 @@ export const serializeGroup = (node: GroupNode): PropertiesErrorOrWarning => {
     },
 
     errors: [],
-    warnings: [
-      {
-        nodeId: node.id,
-        layer: truncateName(node.name),
-        property: "GROUP",
-        problem: "converted to frame",
-      },
-    ],
+    warnings: [],
   }
 }

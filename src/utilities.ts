@@ -103,8 +103,6 @@ const formatOpenTag = (
 const resolveTag = (properties: Record<string, unknown>): string => {
   if (properties.type === "TEXT") return "Text"
   if (properties.type === "VECTOR") return "Vector"
-  if (properties.type === "ELLIPSE") return "Ellipse"
-  if (properties.type === "RECTANGLE") return "Rectangle"
 
   return "Frame"
 }
@@ -127,20 +125,16 @@ const renderNode = (node: PropertiesErrorOrWarning, indentation: string): string
   if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation)
   if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation)
 
-  const selfClosing = tag === "Ellipse" || tag === "Rectangle" || tag === "Vector"
+  const selfClosing = tag === "Vector"
   const open = formatOpenTag(tag, properties, indentation, selfClosing)
 
   if (selfClosing) return open
   if (tag === "Text")
     return [open, `${indentation}${INDENT}${properties.characters}`, `${indentation}</Text>`].join("\n")
 
-  const parts = [
-    open,
-    ...children.map((child) => renderNode(child, `${indentation}${INDENT}`)),
-    `${indentation}</${tag}>`,
-  ]
+  const inner = renderChildren(children, `${indentation}${INDENT}`)
 
-  return parts.join("\n")
+  return [open, ...(inner.length > 0 ? [inner] : []), `${indentation}</${tag}>`].join("\n")
 }
 
 export const renderComponentCode = (json: PropertiesErrorOrWarning): string => renderNode(json, "")

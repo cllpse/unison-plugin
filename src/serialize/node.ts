@@ -1,11 +1,9 @@
 import type { PropertiesErrorOrWarning } from "../types"
 import { getMainDefinitionLayerForNode, hasExcludeFromOutputAnnotation } from "./annotationExclude"
-import { serializeEllipse } from "./ellipse"
 import { serializeFrame } from "./frame"
 import { serializeGroup } from "./group"
-import { serializeRectangle } from "./rectangle"
 import { serializeText } from "./text"
-import { serializeUnknown } from "./unknown"
+import { serializeUnsupported } from "./unsupported"
 import { serializeVector } from "./vector"
 
 const shouldExcludeFromOutput = async (
@@ -51,16 +49,10 @@ const serializeLayer = async (node: SceneNode): Promise<PropertiesErrorOrWarning
     }
     case "VECTOR":
       return serializeVector(node)
-    case "RECTANGLE":
-      return serializeRectangle(node)
-    case "ELLIPSE":
-      return serializeEllipse(node)
     case "TEXT":
       return serializeText(node)
     default:
-      return serializeUnknown(
-        node as SceneNode & AutoLayoutMixin & CornerMixin & LayoutMixin & MinimalFillsMixin & MinimalStrokesMixin,
-      )
+      return serializeUnsupported(node)
   }
 }
 
