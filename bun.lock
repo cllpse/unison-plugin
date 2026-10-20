@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "frame-plugin",
+      "name": "unison-plugin",
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
         "@figma/plugin-typings": "^1.123.0",

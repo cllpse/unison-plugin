@@ -1,5 +1,5 @@
 {
-  "name": "cllpse-figma",
+  "name": "Unison",
   "id": "1691815551141309696",
   "api": "1.0.0",
   "main": "index.js",
@@ -15,7 +15,7 @@
   "relaunchButtons": [
     {
       "command": "run",
-      "name": "cllpse-figma"
+      "name": "Unison"
     }
   ]
 }
