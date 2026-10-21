@@ -1,4 +1,4 @@
-![Unison](assets/unison.svg)
+<img width="1920" height="1080" alt="Product" src="https://github.com/user-attachments/assets/410815d5-0f55-4c12-a76f-cbd567628af7" />
 
 # unison-plugin
 
