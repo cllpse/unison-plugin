@@ -61,12 +61,12 @@ const flatten = (group: Group, path = "", tokens = new Map<string, Token>()): Ma
     scales.filter((scale) => children.every(([key, node]) => scaleOf(key) !== scale || isNumberToken(node))),
   )
 
-  children.sort(([keyA, a], [keyB, b]) => {
+  children.sort(([keyA, nodeA], [keyB, nodeB]) => {
     const scale = scales.indexOf(scaleOf(keyA)) - scales.indexOf(scaleOf(keyB))
 
     if (scale !== 0 || !numberScales.has(scaleOf(keyA))) return scale
 
-    return Number(a.get("$value")) - Number(b.get("$value"))
+    return Number(nodeA.get("$value")) - Number(nodeB.get("$value"))
   })
 
   for (const [key, node] of children) {
@@ -74,9 +74,11 @@ const flatten = (group: Group, path = "", tokens = new Map<string, Token>()): Ma
 
     if (node.has("$value")) {
       tokens.set(name, toObject(node) as Token)
-    } else {
-      flatten(node, `${name}/`, tokens)
+
+      continue
     }
+
+    flatten(node, `${name}/`, tokens)
   }
 
   return tokens
@@ -100,9 +102,7 @@ const modeName = (mode: Group): string => {
 }
 
 export const importVariables = async (text: unknown): Promise<string> => {
-  if (figma.editorType !== "figma") {
-    return "Variables need the Figma editor."
-  }
+  if (figma.editorType !== "figma") return "Variables need the Figma editor."
 
   let file: unknown
 
@@ -112,9 +112,7 @@ export const importVariables = async (text: unknown): Promise<string> => {
     file = undefined
   }
 
-  if (!(file instanceof Map)) {
-    throw new Error("not a design tokens file.")
-  }
+  if (!(file instanceof Map)) throw new Error("not a design tokens file.")
 
   const collectionsInFile = [...file].map(([name, modes]) => ({
     name,
@@ -135,12 +133,12 @@ export const importVariables = async (text: unknown): Promise<string> => {
       collections.find((existing) => existing.name === name) ?? figma.variables.createVariableCollection(name)
 
     // The first mode reuses the collection's default mode; the rest are found by name or added.
-    const modeIds = modes.map((mode, i) => {
-      const existing = collection.modes.find((m) => m.name === modeName(mode))
+    const modeIds = modes.map((mode, index) => {
+      const existing = collection.modes.find((collectionMode) => collectionMode.name === modeName(mode))
 
-      if (existing) return existing.modeId
+      if (existing !== undefined) return existing.modeId
 
-      if (i === 0) {
+      if (index === 0) {
         collection.renameMode(collection.defaultModeId, modeName(mode))
 
         return collection.defaultModeId
@@ -157,26 +155,24 @@ export const importVariables = async (text: unknown): Promise<string> => {
     for (const [variableName, token] of tokensByMode[0]) {
       const type = TYPES[token.$type]
 
-      if (!type) continue
+      if (type === undefined) continue
 
       let variable = byName.get(variableName)
 
-      if (variable && variable.resolvedType !== type) {
+      if (variable !== undefined && variable.resolvedType !== type) {
         variable.remove()
         variable = undefined
       }
 
-      if (variable) {
-        updated++
-      } else {
-        variable = figma.variables.createVariable(variableName, collection, type)
-        created++
-      }
+      if (variable) updated++
+      if (variable === undefined) created++
+
+      variable ??= figma.variables.createVariable(variableName, collection, type)
 
       variable.scopes = token.$extensions?.["com.figma.scopes"] ?? ["ALL_SCOPES"]
 
-      for (const [i, tokens] of tokensByMode.entries()) {
-        variable.setValueForMode(modeIds[i], valueOfToken(tokens.get(variableName) ?? token))
+      for (const [index, tokens] of tokensByMode.entries()) {
+        variable.setValueForMode(modeIds[index], valueOfToken(tokens.get(variableName) ?? token))
       }
     }
   }

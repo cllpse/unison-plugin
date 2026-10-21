@@ -1,5 +1,5 @@
 import type { FigmaFrameAlignment, FigmaTypographyAlignment } from "../../unison-components/types/figma"
-import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import type { Issue, Properties, PropertiesAndIssues } from "../types"
 import { formatValue, truncateName } from "../utilities"
 
 const FRAME_ALIGNMENT: Record<string, keyof FigmaFrameAlignment> = {
@@ -37,9 +37,9 @@ const FRAME_ALIGNMENT: Record<string, keyof FigmaFrameAlignment> = {
   VERTICAL_SPACE_BETWEEN_BASELINE: "alignment-left",
 }
 
-export const readAlignmentFrame = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOrWarning => {
+export const readAlignmentFrame = (node: SceneNode & AutoLayoutMixin): PropertiesAndIssues => {
   const properties: Properties = {}
-  const errors: ErrorOrWarning[] = []
+  const errors: Issue[] = []
 
   // Without horizontal or vertical auto layout there's no alignment to read; readLayout reports that.
   if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
@@ -55,7 +55,8 @@ const TEXT_ALIGNMENT: Record<string, keyof FigmaTypographyAlignment> = {
   RIGHT: "typography-align-right",
 }
 
-export const readAlignmentText = (node: TextNode): PropertiesErrorOrWarning => {
+// Justified text has no flag; it renders left aligned.
+export const readAlignmentText = (node: TextNode): PropertiesAndIssues => {
   const alignment = node.textAlignHorizontal
 
   if (alignment === "LEFT" || alignment === "CENTER" || alignment === "RIGHT") {
@@ -64,15 +65,16 @@ export const readAlignmentText = (node: TextNode): PropertiesErrorOrWarning => {
 
   return {
     properties: {},
-    errors: [
+    errors: [],
+    warnings: [
       {
         nodeId: node.id,
         layer: truncateName(node.name),
         property: "TEXT ALIGNMENT",
         problem: "must be left, center or right",
         value: formatValue(alignment),
+        explanation: "Rendered left aligned.",
       },
     ],
-    warnings: [],
   }
 }

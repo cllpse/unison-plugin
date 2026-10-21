@@ -5,65 +5,37 @@ import { readEffect } from "../read/effect"
 import { readFill } from "../read/fill"
 import { readGap } from "../read/gap"
 import { readIdentity } from "../read/identity"
+import { readLayerSettings } from "../read/layer"
 import { readLayout } from "../read/layout"
 import { readPadding } from "../read/padding"
 import { readStroke } from "../read/stroke"
-import type { ErrorOrWarning, PropertiesErrorOrWarning } from "../types"
+import type { PropertiesAndIssues } from "../types"
+import { combineReads } from "../utilities"
 
-export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<PropertiesErrorOrWarning> => {
-  const alignment = readAlignmentFrame(node)
-  const cornerRadius = await readCornerRadius(node)
-  const dimensions = await readDimensions(node)
-  const effect = await readEffect(node)
-  const fill = await readFill(node)
-  const gap = await readGap(node)
-  const layout = readLayout(node)
-  const padding = await readPadding(node)
-  const stroke = await readStroke(node)
-
+export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<PropertiesAndIssues> => {
   // In the order of Figma's right panel, like the rendered flags.
-  const errors: ErrorOrWarning[] = [
-    ...layout.errors,
-    ...dimensions.errors,
-    ...alignment.errors,
-    ...gap.errors,
-    ...padding.errors,
-    ...cornerRadius.errors,
-    ...fill.errors,
-    ...stroke.errors,
-    ...effect.errors,
-  ]
-
-  const warnings: ErrorOrWarning[] = [
-    ...layout.warnings,
-    ...dimensions.warnings,
-    ...alignment.warnings,
-    ...gap.warnings,
-    ...padding.warnings,
-    ...cornerRadius.warnings,
-    ...fill.warnings,
-    ...stroke.warnings,
-    ...effect.warnings,
-  ]
+  const { properties, ...issues } = combineReads([
+    readLayerSettings(node),
+    readLayout(node),
+    await readDimensions(node),
+    readAlignmentFrame(node),
+    await readGap(node),
+    await readPadding(node),
+    await readCornerRadius(node),
+    await readFill(node),
+    await readStroke(node),
+    await readEffect(node),
+  ])
 
   return {
     properties: {
       ...readIdentity(node),
 
-      ...alignment.properties,
-      ...cornerRadius.properties,
-      ...dimensions.properties,
-      ...effect.properties,
-      ...fill.properties,
-      ...gap.properties,
-      ...layout.properties,
-      ...padding.properties,
-      ...stroke.properties,
+      ...properties,
 
       children: node.children,
     },
 
-    errors,
-    warnings,
+    ...issues,
   }
 }

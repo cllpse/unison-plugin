@@ -1,15 +1,20 @@
-import type { HEX, PropertiesErrorOrWarning } from "./types"
+import type { Hex, PropertiesAndIssues } from "./types"
 
-const toHex = (n: number): string => {
-  const clamped = Math.max(0, Math.min(255, Math.round(n)))
+const formatHexByte = (value: number): string => {
+  const clamped = Math.max(0, Math.min(255, Math.round(value)))
   const hex = clamped.toString(16).toUpperCase()
 
   return hex.length === 1 ? `0${hex}` : hex
 }
 
-export const RGBToHEX = (rgb: RGB): HEX => `#${toHex(rgb.r * 255)}${toHex(rgb.g * 255)}${toHex(rgb.b * 255)}`
+/**
+ * A Figma color as a hex code.
+ * @example convertRgbToHex({ r: 1, g: 0.5, b: 0 }) // "#FF8000"
+ */
+export const convertRgbToHex = (rgb: RGB): Hex =>
+  `#${formatHexByte(rgb.r * 255)}${formatHexByte(rgb.g * 255)}${formatHexByte(rgb.b * 255)}`
 
-const INDENT = ` `.repeat(4)
+const INDENT = " ".repeat(4)
 
 const META_KEYS = new Set(["id", "type", "name", "children", "characters"])
 
@@ -59,9 +64,9 @@ const getPanelRank = (flag: string): number => {
   let rank = PANEL_ORDER.length
   let length = 0
 
-  for (const [i, prefix] of PANEL_ORDER.entries()) {
+  for (const [index, prefix] of PANEL_ORDER.entries()) {
     if (flag.startsWith(prefix) && prefix.length > length) {
-      rank = i
+      rank = index
       length = prefix.length
     }
   }
@@ -75,7 +80,7 @@ const SKIP_WRAPPER_TYPES = new Set(["INSTANCE", "COMPONENT", "SLOT"])
 
 /** The boolean flags of a node, rendered one per line in its opening tag. */
 const getFlagKeys = (properties: Record<string, unknown>): string[] =>
-  Object.keys(properties).filter((k) => !META_KEYS.has(k) && properties[k] === true)
+  Object.keys(properties).filter((key) => !META_KEYS.has(key) && properties[key] === true)
 
 const formatOpenTag = (
   tag: string,
@@ -85,15 +90,15 @@ const formatOpenTag = (
 ): string => {
   const flags = getFlagKeys(properties).sort(compareByPanelOrder)
   const attributes = (STRING_PROP_KEYS[tag] ?? [])
-    .filter((k) => typeof properties[k] === "string")
-    .map((k) => `${k}="${properties[k]}"`)
+    .filter((key) => typeof properties[key] === "string")
+    .map((key) => `${key}="${properties[key]}"`)
   const keys = [...flags, ...attributes]
 
   if (keys.length === 0) return selfClosing ? `${indentation}<${tag} />` : `${indentation}<${tag}>`
 
   const lines = [
     `${indentation}<${tag}`,
-    ...keys.map((k) => `${indentation}  ${k}`),
+    ...keys.map((key) => `${indentation}  ${key}`),
     selfClosing ? `${indentation}/>` : `${indentation}>`,
   ]
 
@@ -109,19 +114,19 @@ const resolveTag = (properties: Record<string, unknown>): string => {
   return "This"
 }
 
-const renderChildren = (children: PropertiesErrorOrWarning[], indentation: string): string =>
+const renderChildren = (children: PropertiesAndIssues[], indentation: string): string =>
   children
     .map((child) => renderNode(child, indentation))
     .filter((part) => part.length > 0)
     .join("\n")
 
-const renderNode = (node: PropertiesErrorOrWarning, indentation: string): string => {
+const renderNode = (node: PropertiesAndIssues, indentation: string): string => {
   const { properties } = node
 
   if (properties.EXCLUDE_FROM_OUTPUT === true) return ""
 
   const tag = resolveTag(properties)
-  const children = (properties.children as PropertiesErrorOrWarning[] | undefined) ?? []
+  const children = (properties.children as PropertiesAndIssues[] | undefined) ?? []
   const type = properties.type
 
   if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation)
@@ -139,15 +144,17 @@ const renderNode = (node: PropertiesErrorOrWarning, indentation: string): string
   return [open, ...(inner.length > 0 ? [inner] : []), `${indentation}</${tag}>`].join("\n")
 }
 
-export const renderComponentCode = (json: PropertiesErrorOrWarning): string => renderNode(json, "")
+export const renderComponentCode = (tree: PropertiesAndIssues): string => renderNode(tree, "")
 
 /**
- * A Figma value as it reads in an Issues line: numbers to at most 2 decimals, enums in lower case.
- * @example formatValue(12.3456) // 12.35
+ * A Figma value as it reads in an Issues line: numbers to at most 2 decimals with their unit (pixels unless given),
+ * enums in lower case.
+ * @example formatValue(12.3456) // "12.35px"
+ * @example formatValue(45, "deg") // "45deg"
  * @example formatValue("BOOLEAN_OPERATION") // "boolean operation"
  */
-export const formatValue = (value: number | string): string | number =>
-  typeof value === "number" ? Math.round(value * 100) / 100 : value.toLowerCase().replace(/_/g, " ")
+export const formatValue = (value: number | string, unit = "px"): string =>
+  typeof value === "number" ? `${Math.round(value * 100) / 100}${unit}` : value.toLowerCase().replace(/_/g, " ")
 
 const MAX_NAME_LENGTH = 15
 
@@ -157,3 +164,11 @@ const MAX_NAME_LENGTH = 15
  */
 export const truncateName = (name: string): string =>
   name.length > MAX_NAME_LENGTH ? `${name.slice(0, MAX_NAME_LENGTH)}…` : name
+
+/** Reads combined into one result, their issues kept in the order of the reads. */
+export const combineReads = (reads: PropertiesAndIssues[]): PropertiesAndIssues => ({
+  properties: Object.assign({}, ...reads.map((read) => read.properties)),
+  errors: reads.flatMap((read) => read.errors),
+  warnings: reads.flatMap((read) => read.warnings),
+  notifications: reads.flatMap((read) => read.notifications ?? []),
+})

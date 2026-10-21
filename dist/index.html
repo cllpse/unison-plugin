@@ -15,10 +15,19 @@
       :root {
         --font-family: Inter, Helvetica, sans-serif;
         --font-mono: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        /* Values (the output and the issues), a step up from the 11px labels, like the values in Figma's sidebar. */
-        --font-size-value: 12px;
-        /* Same ratio as Figma's body style, 16px on 11px. */
-        --line-height-value: calc(var(--font-size-value) * 16 / 11);
+        /* Figma's UI3 sizes: 11/16 body text (the code too, like Dev Mode's), the 4px spacing grid, 24px icon buttons
+           holding 16px icons, 40px section headers, and its radii: 2px for tags, 5px for buttons. */
+        --font-size: 11px;
+        --line-height: 16px;
+        --spacing-4: 4px;
+        --spacing-8: 8px;
+        --spacing-12: 12px;
+        --spacing-16: 16px;
+        --size-icon: 16px;
+        --size-control: 24px;
+        --size-section: 40px;
+        --radius-small: 2px;
+        --radius-medium: 5px;
       }
 
       *, ::before, ::after {
@@ -40,9 +49,9 @@
            page itself never grows a scrollbar of its own. */
         overflow: hidden;
         font-family: var(--font-family);
-        font-size: 11px;
+        font-size: var(--font-size);
         font-weight: 450;
-        line-height: 16px;
+        line-height: var(--line-height);
         letter-spacing: 0.005em;
         color: var(--figma-color-text);
         background-color: var(--figma-color-bg);
@@ -55,10 +64,11 @@
         align-items: center;
         justify-content: space-between;
         flex-shrink: 0;
-        height: 40px;
-        /* 8px on the right lines the header buttons up with the toolbar's. */
-        padding: 0 8px 0 16px;
-        gap: 8px;
+        /* A section header, like those in Figma's properties panel: 16px in for the text, 8px for the buttons, which lines
+           them up with the toolbar's. */
+        height: var(--size-section);
+        padding: 0 var(--spacing-8) 0 var(--spacing-16);
+        gap: var(--spacing-8);
         background-color: var(--figma-color-bg);
         border-bottom: 1px solid var(--figma-color-border);
       }
@@ -82,11 +92,11 @@
         margin: 0;
         border: none;
         outline: none;
-        padding: 12px 16px;
+        padding: var(--spacing-8);
         resize: none;
         font-family: var(--font-mono);
-        font-size: var(--font-size-value);
-        line-height: var(--line-height-value);
+        font-size: var(--font-size);
+        line-height: var(--line-height);
         letter-spacing: 0;
         color: var(--figma-color-text);
         background-color: var(--figma-color-bg-secondary);
@@ -102,11 +112,11 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 24px;
-        height: 24px;
+        width: var(--size-control);
+        height: var(--size-control);
         padding: 0;
         border: 1px solid transparent;
-        border-radius: 4px;
+        border-radius: var(--radius-medium);
         outline: none;
         appearance: none;
         background-color: transparent;
@@ -145,6 +155,8 @@
 
         svg {
           display: block;
+          width: var(--size-icon);
+          height: var(--size-icon);
           pointer-events: none;
         }
       }
@@ -155,8 +167,8 @@
          code pane under it is already secondary grey. */
       menu {
         position: absolute;
-        top: 8px;
-        right: 8px;
+        top: var(--spacing-8);
+        right: var(--spacing-8);
         display: flex;
         flex-direction: row;
         gap: 1px;
@@ -169,11 +181,11 @@
         }
 
         button:first-child {
-          border-radius: 5px 0 0 5px;
+          border-radius: var(--radius-medium) 0 0 var(--radius-medium);
         }
 
         button:last-child {
-          border-radius: 0 5px 5px 0;
+          border-radius: 0 var(--radius-medium) var(--radius-medium) 0;
         }
 
         /* Hover and press both go exactly one shade past the fill, toward the text color so it works in light and dark. */
@@ -183,11 +195,11 @@
         }
       }
 
-      /* Import sits before the "Show output" toggle, 8px apart. */
+      /* Import sits before the "Show output" toggle, 8px apart on Figma's 4px grid. */
       .header-actions {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--spacing-8);
       }
 
       /* The import icon is a label for the file input, so a click opens the file picker natively. The input stays in
@@ -200,24 +212,22 @@
         pointer-events: none;
       }
 
-      summary {
+      #issues {
         display: flex;
         flex-direction: column;
         flex: 0 1 auto;
         min-height: 0;
         max-height: 50%;
         overflow: hidden auto;
-        padding: 12px 16px;
-        gap: 4px;
-        font-size: var(--font-size-value);
-        line-height: var(--line-height-value);
+        padding: var(--spacing-12) var(--spacing-8);
+        gap: var(--spacing-4);
         scrollbar-gutter: stable;
       }
 
-      /* Section title, like the headings in Figma's properties panel, which sit 12px above their first row (8px here
-         plus the list's 4px gap). */
+      /* Section title, 12px above its first row (8px here plus the list's 4px gap), so the rows start 40px down, under
+         a header as tall as Figma's. */
       .title {
-        margin-bottom: 8px;
+        margin-bottom: var(--spacing-8);
         font-weight: 550;
       }
 
@@ -235,28 +245,28 @@
         display: none;
       }
 
-      body.output-hidden summary {
+      body.output-hidden #issues {
         flex: 1 1 auto;
         max-height: none;
       }
 
-      /* Scrollbars are overlay-ish: the gutter is reserved (scrollbar-gutter on textarea and summary) so revealing a
+      /* Scrollbars are overlay-ish: the gutter is reserved (scrollbar-gutter on the textarea and the issues) so revealing a
          thumb never reflows the content, but track and thumb stay transparent unless the region is being scrolled. */
       textarea::-webkit-scrollbar,
-      summary::-webkit-scrollbar {
+      #issues::-webkit-scrollbar {
         width: 10px;
         height: 10px;
       }
 
       textarea::-webkit-scrollbar-track,
       textarea::-webkit-scrollbar-corner,
-      summary::-webkit-scrollbar-track,
-      summary::-webkit-scrollbar-corner {
+      #issues::-webkit-scrollbar-track,
+      #issues::-webkit-scrollbar-corner {
         background-color: transparent;
       }
 
       textarea::-webkit-scrollbar-thumb,
-      summary::-webkit-scrollbar-thumb {
+      #issues::-webkit-scrollbar-thumb {
         /* A 4px pill, inset from the edges by the transparent border. */
         border: 3px solid transparent;
         border-radius: 999px;
@@ -266,14 +276,14 @@
       }
 
       textarea[data-scrolling]::-webkit-scrollbar-thumb,
-      summary[data-scrolling]::-webkit-scrollbar-thumb {
+      #issues[data-scrolling]::-webkit-scrollbar-thumb {
         background-color: var(--figma-color-text-tertiary);
       }
 
       textarea[data-scrolling]::-webkit-scrollbar-thumb:hover,
       textarea[data-scrolling]::-webkit-scrollbar-thumb:active,
-      summary[data-scrolling]::-webkit-scrollbar-thumb:hover,
-      summary[data-scrolling]::-webkit-scrollbar-thumb:active {
+      #issues[data-scrolling]::-webkit-scrollbar-thumb:hover,
+      #issues[data-scrolling]::-webkit-scrollbar-thumb:active {
         background-color: var(--figma-color-text-secondary);
       }
 
@@ -294,8 +304,8 @@
       .property {
         /* Inline, so the row's hover underline runs through it. The vertical padding grows the tint from Inter's 1.21em
            content area to the full line height. */
-        padding: calc((var(--line-height-value) - 1.21em) / 2) 4px;
-        border-radius: 3px;
+        padding: calc((var(--line-height) - 1.21em) / 2) var(--spacing-4);
+        border-radius: var(--radius-small);
         background-color: color-mix(in srgb, currentColor 8%, transparent);
       }
 
@@ -307,14 +317,41 @@
         color: var(--figma-color-text-secondary);
       }
 
+      /* An issue row: its layer's type icon, then the line, in the row's color. */
+      .issue {
+        display: flex;
+        /* The icon stays beside the first line when an explanation adds a second. */
+        align-items: flex-start;
+        gap: var(--spacing-4);
+
+        /* Each line only as wide as its text, so the hover underline stops where the line does. */
+        .text {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        /* The row's own color, toned down so the issue itself leads. */
+        .explanation {
+          opacity: 0.7;
+        }
+
+        svg {
+          flex-shrink: 0;
+          width: var(--size-icon);
+          height: var(--size-icon);
+        }
+      }
+
       /* Issues link to their layer. */
-      summary [data-id] {
+      #issues [data-id] {
         width: fit-content;
         cursor: pointer;
 
-        /* Drawn as one line under the whole row rather than text-decoration, which skips the tag's padding. */
-        &:hover {
-          background: linear-gradient(currentColor, currentColor) 0 calc(100% - 3px) / 100% 1px no-repeat;
+        /* Drawn as one line under the text rather than text-decoration, which skips the tag's padding; the icon stays
+           clear of it. */
+        &:hover .line {
+          background: linear-gradient(currentColor, currentColor) 0 calc(100% - 2px) / 100% 1px no-repeat;
         }
       }
     </style>
@@ -326,11 +363,11 @@
 
       <div class="header-actions">
         <label id="import" class="icon-button" for="import-file" aria-label="Import design tokens as variables and styles">
-          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M295.08-156.12 109.96-480l185.12-324.08h370.03L850.04-480 665.11-156.12H295.08Zm28.03-47.96h313.97L794.96-480 637.08-756.12H323.11L165.04-480l158.07 275.92ZM480-480Z" /><path d="M456-600h48v96h96v48h-96v96h-48v-96h-96v-48h96Z" /></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M3.99421 10.375C3.83013 10.375 3.6795 10.3353 3.54233 10.2558C3.40508 10.1763 3.29546 10.0654 3.21346 9.92313L1.20283 6.45188C1.12083 6.30963 1.07983 6.159 1.07983 6C1.07983 5.841 1.12083 5.69037 1.20283 5.54812L3.21346 2.07688C3.29546 1.93463 3.40508 1.82375 3.54233 1.74425C3.6795 1.66475 3.83013 1.625 3.99421 1.625H8.00571C8.16979 1.625 8.32042 1.66475 8.45758 1.74425C8.59483 1.82375 8.70446 1.93463 8.78646 2.07688L10.7971 5.54812C10.8791 5.69037 10.9201 5.841 10.9201 6C10.9201 6.159 10.8791 6.30963 10.7971 6.45188L8.78646 9.92313C8.70446 10.0654 8.59483 10.1763 8.45758 10.2558C8.32042 10.3353 8.16979 10.375 8.00571 10.375H3.99421ZM3.98933 9.625H8.00571C8.03138 9.625 8.05621 9.61858 8.08021 9.60575C8.10429 9.59292 8.12433 9.57371 8.14033 9.54812L10.1385 6.07688C10.1545 6.05129 10.1625 6.02567 10.1625 6C10.1625 5.97433 10.1545 5.94871 10.1385 5.92313L8.14033 2.45188C8.12433 2.42629 8.10429 2.40708 8.08021 2.39425C8.05621 2.38142 8.03138 2.375 8.00571 2.375H3.98933C3.96375 2.375 3.93971 2.38142 3.91721 2.39425C3.89479 2.40708 3.87558 2.42629 3.85958 2.45188L1.84896 5.92313C1.83296 5.94871 1.82496 5.97433 1.82496 6C1.82496 6.02567 1.83296 6.05129 1.84896 6.07688L3.85958 9.54812C3.87558 9.57371 3.89479 9.59292 3.91721 9.60575C3.93971 9.61858 3.96375 9.625 3.98933 9.625Z" /><path d="M5.62507 6.37507V7.52894C5.62507 7.63536 5.66098 7.72444 5.73282 7.79619C5.80457 7.86802 5.89365 7.90394 6.00007 7.90394C6.10648 7.90394 6.19557 7.86802 6.26732 7.79619C6.33915 7.72444 6.37507 7.63536 6.37507 7.52894V6.37507H7.52894C7.63536 6.37507 7.72444 6.33915 7.79619 6.26732C7.86802 6.19557 7.90394 6.10648 7.90394 6.00007C7.90394 5.89365 7.86802 5.80457 7.79619 5.73282C7.72444 5.66098 7.63536 5.62507 7.52894 5.62507H6.37507V4.47119C6.37507 4.36477 6.33915 4.27569 6.26732 4.20394C6.19557 4.13211 6.10648 4.09619 6.00007 4.09619C5.89365 4.09619 5.80457 4.13211 5.73282 4.20394C5.66098 4.27569 5.62507 4.36477 5.62507 4.47119V5.62507H4.47119C4.36477 5.62507 4.27569 5.66098 4.20394 5.73282C4.13211 5.80457 4.09619 5.89365 4.09619 6.00007C4.09619 6.10648 4.13211 6.19557 4.20394 6.26732C4.27569 6.33915 4.36477 6.37507 4.47119 6.37507H5.62507Z" /></svg>
         </label>
         <input id="import-file" type="file" accept=".json,application/json" tabindex="-1" />
         <button id="output-toggle" type="button" aria-pressed="true" aria-label="Show component code">
-          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M228-317.15 65.15-480 228-643.04 262.42-609 133.04-480l129.38 129L228-317.15Zm188.35 120.53-46.23-14.23 172.73-553.03 46.42 14.53-172.92 552.73ZM732-317.15 697.77-351l129.38-129-129.38-129L732-643.04 895.04-480 732-317.15Z" /></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M1.73464 6.00008L3.26352 7.52896C3.33268 7.60329 3.36856 7.69158 3.37114 7.79383C3.37373 7.89608 3.33785 7.98438 3.26352 8.05871C3.1891 8.13304 3.10127 8.17021 3.00002 8.17021C2.89877 8.17021 2.81093 8.13304 2.73652 8.05871L0.994268 6.31646C0.903851 6.22604 0.858643 6.12058 0.858643 6.00008C0.858643 5.87958 0.903851 5.77413 0.994268 5.68371L2.73652 3.94146C2.81093 3.86713 2.89877 3.82996 3.00002 3.82996C3.10127 3.82996 3.1891 3.86713 3.26352 3.94146C3.33785 4.01579 3.37502 4.10408 3.37502 4.20633C3.37502 4.30858 3.33785 4.39688 3.26352 4.47121L1.73464 6.00008ZM4.56927 9.69383C4.52118 9.60183 4.51318 9.50679 4.54527 9.40871L6.74527 2.36358C6.77727 2.2655 6.83848 2.19242 6.92889 2.14433C7.01923 2.09625 7.11343 2.08825 7.21152 2.12033C7.3096 2.15233 7.38348 2.21354 7.43314 2.30396C7.48281 2.39429 7.49164 2.4885 7.45964 2.58658L5.25477 9.63658C5.22277 9.73467 5.16156 9.80775 5.07114 9.85583C4.98081 9.90392 4.8866 9.91192 4.78852 9.87983C4.69043 9.84783 4.61735 9.78583 4.56927 9.69383ZM10.2654 6.00008L8.73652 4.47121C8.66218 4.39688 8.62502 4.30858 8.62502 4.20633C8.62502 4.10408 8.66218 4.01579 8.73652 3.94146C8.81093 3.86713 8.89877 3.82996 9.00002 3.82996C9.10127 3.82996 9.1891 3.86713 9.26352 3.94146L11.0058 5.68371C11.0962 5.77413 11.1414 5.87958 11.1414 6.00008C11.1414 6.12058 11.0962 6.22604 11.0058 6.31646L9.26352 8.05871C9.1891 8.13304 9.10127 8.17021 9.00002 8.17021C8.89877 8.17021 8.81093 8.13304 8.73652 8.05871C8.66218 7.98438 8.62502 7.89608 8.62502 7.79383C8.62502 7.69158 8.66218 7.60329 8.73652 7.52896L10.2654 6.00008Z" /></svg>
         </button>
       </div>
     </header>
@@ -338,29 +375,28 @@
     <div class="output">
       <textarea id="textarea" spellcheck="false"></textarea>
 
-
       <menu>
         <button id="back" type="button" aria-label="Select previous layer">
-          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M382.88-306.69 209.58-480l173.3-173.31 33.93 33.46-115.77 115.77h449.38v47.96H301.04l115.77 115.77-33.93 33.66Z" /></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M3.59321 6.37488L5.23933 8.021C5.31375 8.09542 5.35046 8.18246 5.34946 8.28213C5.34854 8.38179 5.31183 8.47042 5.23933 8.548C5.16183 8.6255 5.07275 8.66554 4.97208 8.66813C4.87142 8.67071 4.78233 8.63321 4.70483 8.55563L2.46533 6.31625C2.375 6.22583 2.32983 6.12038 2.32983 5.99988C2.32983 5.87938 2.375 5.77392 2.46533 5.6835L4.70483 3.44413C4.77917 3.36979 4.86746 3.33308 4.96971 3.334C5.07196 3.335 5.16183 3.37425 5.23933 3.45175C5.31183 3.52934 5.34933 3.61717 5.35183 3.71525C5.35442 3.81333 5.31692 3.90117 5.23933 3.97875L3.59321 5.62488H9.47596C9.58238 5.62488 9.67146 5.66079 9.74321 5.73263C9.81504 5.80438 9.85096 5.89346 9.85096 5.99988C9.85096 6.10629 9.81504 6.19538 9.74321 6.26713C9.67146 6.33896 9.58238 6.37488 9.47596 6.37488H3.59321Z" /></svg>
         </button>
         <button id="refresh" type="button" aria-label="Regenerate component code">
-          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M482.01-219.27q-109.02 0-185.26-76.18-76.25-76.18-76.25-184.52t76.25-184.55q76.24-76.21 185.29-76.21 65.65 0 119.96 29.54 54.31 29.54 89.73 78.69v-108.23h47.96V-545H543.96v-47.96h116.96q-28.34-45.65-75.3-72.73-46.95-27.08-103.54-27.08-88.93 0-151.27 62.16-62.35 62.15-62.35 150.73 0 88.57 62.22 150.61 62.22 62.04 151.29 62.04 82.91 0 142.03-54.69 59.12-54.7 67.88-134.89H741q-7.42 101.31-81.69 169.42-74.26 68.12-177.3 68.12Z" /></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M6.01929 9.75C4.97237 9.75 4.08566 9.38679 3.35916 8.66037C2.63258 7.93396 2.26929 7.04742 2.26929 6.00075C2.26929 4.95408 2.63258 4.06729 3.35916 3.34037C4.08566 2.61346 4.97237 2.25 6.01929 2.25C6.60387 2.25 7.15708 2.37996 7.67891 2.63988C8.20066 2.89988 8.63462 3.26671 8.98079 3.74037V2.625C8.98079 2.51875 9.01675 2.42971 9.08866 2.35788C9.16058 2.28596 9.24966 2.25 9.35591 2.25C9.46225 2.25 9.55129 2.28596 9.62304 2.35788C9.69487 2.42971 9.73079 2.51875 9.73079 2.625V4.85575C9.73079 4.98383 9.6875 5.09117 9.60091 5.17775C9.51425 5.26433 9.40691 5.30762 9.27891 5.30762H7.04816C6.94191 5.30762 6.85283 5.27171 6.78091 5.19987C6.70908 5.12796 6.67316 5.03883 6.67316 4.9325C6.67316 4.82625 6.70908 4.73721 6.78091 4.66537C6.85283 4.59362 6.94191 4.55775 7.04816 4.55775H8.64816C8.38466 4.075 8.01925 3.69471 7.55191 3.41687C7.08466 3.13896 6.57379 3 6.01929 3C5.18595 3 4.47762 3.29167 3.89429 3.875C3.31095 4.45833 3.01929 5.16667 3.01929 6C3.01929 6.83333 3.31095 7.54167 3.89429 8.125C4.47762 8.70833 5.18595 9 6.01929 9C6.60037 9 7.13233 8.84742 7.61516 8.54225C8.098 8.23717 8.46379 7.83012 8.71254 7.32113C8.75995 7.23012 8.82966 7.1665 8.92166 7.13025C9.01366 7.09408 9.10741 7.092 9.20291 7.124C9.30483 7.15608 9.37616 7.22275 9.41691 7.324C9.45758 7.42533 9.4542 7.5215 9.40679 7.6125C9.09712 8.25992 8.64004 8.778 8.03554 9.16675C7.43104 9.55558 6.75895 9.75 6.01929 9.75Z" /></svg>
         </button>
         <button id="copy" type="button" aria-label="Copy component code">
-          <svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M276.31-400.42v47.96h-91.95q-24.96 0-42.62-17.57-17.66-17.56-17.66-42.7v-363.42q0-24.96 17.65-42.62 17.66-17.65 42.62-17.65h363.42q24.96 0 42.61 17.73 17.66 17.73 17.66 42.79v92.21h-47.96v-92.46q0-5.2-3.47-8.75-3.46-3.56-8.84-3.56H184.35q-5.39 0-8.85 3.56-3.46 3.55-3.46 8.75v363.42q0 5.38 3.46 8.84 3.46 3.47 8.85 3.47h91.96Zm135.92 276.34q-24.96 0-42.61-17.65-17.66-17.66-17.66-42.62v-363.42q0-24.96 17.66-42.61 17.65-17.66 42.61-17.66h363.42q24.96 0 42.62 17.66 17.65 17.65 17.65 42.61v363.42q0 24.96-17.65 42.62-17.66 17.65-42.62 17.65H412.23Zm0-47.96h363.42q5.39 0 8.85-3.46t3.46-8.85v-363.42q0-5.38-3.46-8.84-3.46-3.47-8.85-3.47H412.23q-5.38 0-8.84 3.47-3.47 3.46-3.47 8.84v363.42q0 5.39 3.47 8.85 3.46 3.46 8.84 3.46Zm181.81-194.11Z" /></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2.15387 7.75C1.90454 7.75 1.69154 7.66171 1.51488 7.48513C1.33829 7.30846 1.25 7.09546 1.25 6.84613V2.15387C1.25 1.90454 1.33829 1.69154 1.51488 1.51488C1.69154 1.33829 1.90454 1.25 2.15387 1.25H6.84613C7.09546 1.25 7.30846 1.33829 7.48513 1.51488C7.66171 1.69154 7.75 1.90454 7.75 2.15387V2.77887C7.75 2.88529 7.71408 2.97438 7.64225 3.04613C7.5705 3.11796 7.48142 3.15387 7.375 3.15387C7.26858 3.15387 7.1795 3.11796 7.10775 3.04613C7.03592 2.97438 7 2.88529 7 2.77887V2.15387C7 2.10896 6.98558 2.07208 6.95675 2.04325C6.92792 2.01442 6.89104 2 6.84613 2H2.15387C2.10896 2 2.07208 2.01442 2.04325 2.04325C2.01442 2.07208 2 2.10896 2 2.15387V6.84613C2 6.89104 2.01442 6.92792 2.04325 6.95675C2.07208 6.98558 2.10896 7 2.15387 7H2.77887C2.88529 7 2.97438 7.03592 3.04613 7.10775C3.11796 7.1795 3.15387 7.26858 3.15387 7.375C3.15387 7.48142 3.11796 7.5705 3.04613 7.64225C2.97438 7.71408 2.88529 7.75 2.77887 7.75H2.15387ZM5.15388 10.75C4.90454 10.75 4.69154 10.6617 4.51488 10.4851C4.33829 10.3085 4.25 10.0955 4.25 9.84613V5.15388C4.25 4.90454 4.33829 4.69154 4.51488 4.51488C4.69154 4.33829 4.90454 4.25 5.15388 4.25H9.84613C10.0955 4.25 10.3085 4.33829 10.4851 4.51488C10.6617 4.69154 10.75 4.90454 10.75 5.15388V9.84613C10.75 10.0955 10.6617 10.3085 10.4851 10.4851C10.3085 10.6617 10.0955 10.75 9.84613 10.75H5.15388ZM5.15388 10H9.84613C9.89104 10 9.92792 9.98558 9.95675 9.95675C9.98558 9.92792 10 9.89104 10 9.84613V5.15388C10 5.10896 9.98558 5.07208 9.95675 5.04325C9.92792 5.01442 9.89104 5 9.84613 5H5.15388C5.10896 5 5.07208 5.01442 5.04325 5.04325C5.01442 5.07208 5 5.10896 5 5.15388V9.84613C5 9.89104 5.01442 9.92792 5.04325 9.95675C5.07208 9.98558 5.10896 10 5.15388 10Z" /></svg>
         </button>
       </menu>
     </div>
 
-    <summary>
+    <section id="issues">
       <p class="title">Issues</p>
 
       <p class="secondary">Nothing selected</p>
-    </summary>
+    </section>
 
     <script>
       const textarea = document.getElementById("textarea")
-      const summary = document.querySelector("summary")
+      const issues = document.getElementById("issues")
       const outputToggle = document.getElementById("output-toggle")
       const refresh = document.getElementById("refresh")
       const back = document.getElementById("back")
@@ -386,7 +422,7 @@
       }
 
       revealScrollbarWhileScrolling(textarea)
-      revealScrollbarWhileScrolling(summary)
+      revealScrollbarWhileScrolling(issues)
 
       // Every toolbar button confirms what it did here, briefly.
       const showHint = (text, duration = 1500) => {
@@ -450,30 +486,56 @@
         }
       }
 
-      // PADDING LEFT reads as "Padding left".
-      const toSentenceCase = (text) => `${text.charAt(0)}${text.slice(1).toLowerCase()}`
+      // Each issue starts with its layer's type icon: text, frame-like layers, and everything else (vectors, shapes).
+      const LAYER_ICONS = {
+        FRAME: `<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2.69238 10.5576C2.34513 10.5576 2.04997 10.4361 1.80688 10.1931C1.56388 9.95005 1.44238 9.65488 1.44238 9.30763C1.44238 9.02755 1.52488 8.77963 1.68988 8.56388C1.85497 8.34822 2.06413 8.19905 2.31738 8.11638V3.88363C2.06413 3.80097 1.85497 3.6518 1.68988 3.43613C1.52488 3.22038 1.44238 2.97247 1.44238 2.69238C1.44238 2.34513 1.56388 2.04997 1.80688 1.80688C2.04997 1.56388 2.34513 1.44238 2.69238 1.44238C2.97247 1.44238 3.22038 1.52488 3.43613 1.68988C3.6518 1.85497 3.80097 2.06413 3.88363 2.31738H8.11638C8.19397 2.06413 8.34097 1.85497 8.55738 1.68988C8.7738 1.52488 9.02388 1.44238 9.30763 1.44238C9.65488 1.44238 9.95005 1.56388 10.1931 1.80688C10.4361 2.04997 10.5576 2.34513 10.5576 2.69238C10.5576 2.97613 10.4751 3.22622 10.3101 3.44263C10.1451 3.65905 9.93588 3.80605 9.68263 3.88363V8.11638C9.93588 8.19905 10.1451 8.34822 10.3101 8.56388C10.4751 8.77963 10.5576 9.02755 10.5576 9.30763C10.5576 9.65488 10.4361 9.95005 10.1931 10.1931C9.95005 10.4361 9.65488 10.5576 9.30763 10.5576C9.02755 10.5576 8.77963 10.4751 8.56388 10.3101C8.34822 10.1451 8.19905 9.93588 8.11638 9.68263H3.88363C3.80097 9.93588 3.6518 10.1451 3.43613 10.3101C3.22038 10.4751 2.97247 10.5576 2.69238 10.5576ZM2.69238 3.19238C2.83405 3.19238 2.9528 3.14447 3.04863 3.04863C3.14447 2.9528 3.19238 2.83405 3.19238 2.69238C3.19238 2.55072 3.14447 2.43197 3.04863 2.33613C2.9528 2.2403 2.83405 2.19238 2.69238 2.19238C2.55072 2.19238 2.43197 2.2403 2.33613 2.33613C2.2403 2.43197 2.19238 2.55072 2.19238 2.69238C2.19238 2.83405 2.2403 2.9528 2.33613 3.04863C2.43197 3.14447 2.55072 3.19238 2.69238 3.19238ZM9.30763 3.19238C9.4493 3.19238 9.56805 3.14447 9.66388 3.04863C9.75972 2.9528 9.80763 2.83405 9.80763 2.69238C9.80763 2.55072 9.75972 2.43197 9.66388 2.33613C9.56805 2.2403 9.4493 2.19238 9.30763 2.19238C9.16597 2.19238 9.04722 2.2403 8.95138 2.33613C8.85555 2.43197 8.80763 2.55072 8.80763 2.69238C8.80763 2.83405 8.85555 2.9528 8.95138 3.04863C9.04722 3.14447 9.16597 3.19238 9.30763 3.19238ZM3.88363 8.93263H8.11638C8.17855 8.73522 8.2808 8.56538 8.42313 8.42313C8.56538 8.2808 8.73522 8.17855 8.93263 8.11638V3.88363C8.73522 3.82472 8.56455 3.7233 8.42063 3.57938C8.27672 3.43547 8.1753 3.2648 8.11638 3.06738H3.88363C3.82147 3.2648 3.71922 3.43463 3.57688 3.57688C3.43463 3.71922 3.2648 3.82147 3.06738 3.88363V8.11638C3.2648 8.17855 3.43463 8.2808 3.57688 8.42313C3.71922 8.56538 3.82147 8.73522 3.88363 8.93263ZM9.30763 9.80763C9.4493 9.80763 9.56805 9.75972 9.66388 9.66388C9.75972 9.56805 9.80763 9.4493 9.80763 9.30763C9.80763 9.16597 9.75972 9.04722 9.66388 8.95138C9.56805 8.85555 9.4493 8.80763 9.30763 8.80763C9.16597 8.80763 9.04722 8.85555 8.95138 8.95138C8.85555 9.04722 8.80763 9.16597 8.80763 9.30763C8.80763 9.4493 8.85555 9.56805 8.95138 9.66388C9.04722 9.75972 9.16597 9.80763 9.30763 9.80763ZM2.69238 9.80763C2.83405 9.80763 2.9528 9.75972 3.04863 9.66388C3.14447 9.56805 3.19238 9.4493 3.19238 9.30763C3.19238 9.16597 3.14447 9.04722 3.04863 8.95138C2.9528 8.85555 2.83405 8.80763 2.69238 8.80763C2.55072 8.80763 2.43197 8.85555 2.33613 8.95138C2.2403 9.04722 2.19238 9.16597 2.19238 9.30763C2.19238 9.4493 2.2403 9.56805 2.33613 9.66388C2.43197 9.75972 2.55072 9.80763 2.69238 9.80763Z" /></svg>`,
+        TEXT: `<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M5.47113 3.3125H3.28363C3.13672 3.3125 3.01188 3.26104 2.90913 3.15813C2.8063 3.05513 2.75488 2.93013 2.75488 2.78313C2.75488 2.63604 2.8063 2.51042 2.90913 2.40625C3.01188 2.30208 3.13672 2.25 3.28363 2.25H8.72113C8.86805 2.25 8.99292 2.30146 9.09576 2.40437C9.19859 2.50737 9.25001 2.63237 9.25001 2.77937C9.25001 2.92646 9.19859 3.05208 9.09576 3.15625C8.99292 3.26042 8.86805 3.3125 8.72113 3.3125H6.53363V9.22113C6.53363 9.36804 6.48217 9.49292 6.37926 9.59575C6.27634 9.69858 6.15134 9.75 6.00426 9.75C5.85717 9.75 5.73155 9.69813 5.62738 9.59438C5.52322 9.49062 5.47113 9.36462 5.47113 9.21637V3.3125Z" /></svg>`,
+        VECTOR: `<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M1.86737 2.44037C1.78912 2.36221 1.75 2.26671 1.75 2.15387C1.75 2.04104 1.78912 1.94554 1.86737 1.86738C1.94554 1.78913 2.04104 1.75 2.15387 1.75C2.26671 1.75 2.36221 1.78913 2.44037 1.86738C2.51862 1.94554 2.55775 2.04104 2.55775 2.15387C2.55775 2.26671 2.51862 2.36221 2.44037 2.44037C2.36221 2.51862 2.26671 2.55775 2.15387 2.55775C2.04104 2.55775 1.94554 2.51862 1.86737 2.44037ZM3.79038 2.44037C3.71221 2.36221 3.67313 2.26671 3.67313 2.15387C3.67313 2.04104 3.71221 1.94554 3.79038 1.86738C3.86863 1.78913 3.96412 1.75 4.07687 1.75C4.18971 1.75 4.28525 1.78913 4.3635 1.86738C4.44167 1.94554 4.48075 2.04104 4.48075 2.15387C4.48075 2.26671 4.44167 2.36221 4.3635 2.44037C4.28525 2.51862 4.18971 2.55775 4.07687 2.55775C3.96412 2.55775 3.86863 2.51862 3.79038 2.44037ZM5.7135 2.44037C5.63525 2.36221 5.59613 2.26671 5.59613 2.15387C5.59613 2.04104 5.63525 1.94554 5.7135 1.86738C5.79167 1.78913 5.88717 1.75 6 1.75C6.11283 1.75 6.20833 1.78913 6.2865 1.86738C6.36475 1.94554 6.40387 2.04104 6.40387 2.15387C6.40387 2.26671 6.36475 2.36221 6.2865 2.44037C6.20833 2.51862 6.11283 2.55775 6 2.55775C5.88717 2.55775 5.79167 2.51862 5.7135 2.44037ZM7.6365 2.44037C7.55833 2.36221 7.51925 2.26671 7.51925 2.15387C7.51925 2.04104 7.55833 1.94554 7.6365 1.86738C7.71475 1.78913 7.81029 1.75 7.92312 1.75C8.03587 1.75 8.13138 1.78913 8.20963 1.86738C8.28779 1.94554 8.32688 2.04104 8.32688 2.15387C8.32688 2.26671 8.28779 2.36221 8.20963 2.44037C8.13138 2.51862 8.03587 2.55775 7.92312 2.55775C7.81029 2.55775 7.71475 2.51862 7.6365 2.44037ZM9.55963 2.44037C9.48138 2.36221 9.44225 2.26671 9.44225 2.15387C9.44225 2.04104 9.48138 1.94554 9.55963 1.86738C9.63779 1.78913 9.73329 1.75 9.84613 1.75C9.95896 1.75 10.0545 1.78913 10.1326 1.86738C10.2109 1.94554 10.25 2.04104 10.25 2.15387C10.25 2.26671 10.2109 2.36221 10.1326 2.44037C10.0545 2.51862 9.95896 2.55775 9.84613 2.55775C9.73329 2.55775 9.63779 2.51862 9.55963 2.44037ZM1.86737 4.3635C1.78912 4.28525 1.75 4.18971 1.75 4.07688C1.75 3.96413 1.78912 3.86862 1.86737 3.79037C1.94554 3.71221 2.04104 3.67312 2.15387 3.67312C2.26671 3.67312 2.36221 3.71221 2.44037 3.79037C2.51862 3.86862 2.55775 3.96413 2.55775 4.07688C2.55775 4.18971 2.51862 4.28525 2.44037 4.3635C2.36221 4.44167 2.26671 4.48075 2.15387 4.48075C2.04104 4.48075 1.94554 4.44167 1.86737 4.3635ZM9.55963 4.3635C9.48138 4.28525 9.44225 4.18971 9.44225 4.07688C9.44225 3.96413 9.48138 3.86862 9.55963 3.79037C9.63779 3.71221 9.73329 3.67312 9.84613 3.67312C9.95896 3.67312 10.0545 3.71221 10.1326 3.79037C10.2109 3.86862 10.25 3.96413 10.25 4.07688C10.25 4.18971 10.2109 4.28525 10.1326 4.3635C10.0545 4.44167 9.95896 4.48075 9.84613 4.48075C9.73329 4.48075 9.63779 4.44167 9.55963 4.3635ZM1.86737 6.2865C1.78912 6.20833 1.75 6.11283 1.75 6C1.75 5.88717 1.78912 5.79167 1.86737 5.7135C1.94554 5.63525 2.04104 5.59613 2.15387 5.59613C2.26671 5.59613 2.36221 5.63525 2.44037 5.7135C2.51862 5.79167 2.55775 5.88717 2.55775 6C2.55775 6.11283 2.51862 6.20833 2.44037 6.2865C2.36221 6.36475 2.26671 6.40387 2.15387 6.40387C2.04104 6.40387 1.94554 6.36475 1.86737 6.2865ZM9.55963 6.2865C9.48138 6.20833 9.44225 6.11283 9.44225 6C9.44225 5.88717 9.48138 5.79167 9.55963 5.7135C9.63779 5.63525 9.73329 5.59613 9.84613 5.59613C9.95896 5.59613 10.0545 5.63525 10.1326 5.7135C10.2109 5.79167 10.25 5.88717 10.25 6C10.25 6.11283 10.2109 6.20833 10.1326 6.2865C10.0545 6.36475 9.95896 6.40387 9.84613 6.40387C9.73329 6.40387 9.63779 6.36475 9.55963 6.2865ZM1.86737 8.20963C1.78912 8.13138 1.75 8.03588 1.75 7.92313C1.75 7.81029 1.78912 7.71475 1.86737 7.6365C1.94554 7.55833 2.04104 7.51925 2.15387 7.51925C2.26671 7.51925 2.36221 7.55833 2.44037 7.6365C2.51862 7.71475 2.55775 7.81029 2.55775 7.92313C2.55775 8.03588 2.51862 8.13138 2.44037 8.20963C2.36221 8.28779 2.26671 8.32688 2.15387 8.32688C2.04104 8.32688 1.94554 8.28779 1.86737 8.20963ZM9.55963 8.20963C9.48138 8.13138 9.44225 8.03588 9.44225 7.92313C9.44225 7.81029 9.48138 7.71475 9.55963 7.6365C9.63779 7.55833 9.73329 7.51925 9.84613 7.51925C9.95896 7.51925 10.0545 7.55833 10.1326 7.6365C10.2109 7.71475 10.25 7.81029 10.25 7.92313C10.25 8.03588 10.2109 8.13138 10.1326 8.20963C10.0545 8.28779 9.95896 8.32688 9.84613 8.32688C9.73329 8.32688 9.63779 8.28779 9.55963 8.20963ZM1.86737 10.1326C1.78912 10.0545 1.75 9.95896 1.75 9.84613C1.75 9.73329 1.78912 9.63779 1.86737 9.55963C1.94554 9.48138 2.04104 9.44225 2.15387 9.44225C2.26671 9.44225 2.36221 9.48138 2.44037 9.55963C2.51862 9.63779 2.55775 9.73329 2.55775 9.84613C2.55775 9.95896 2.51862 10.0545 2.44037 10.1326C2.36221 10.2109 2.26671 10.25 2.15387 10.25C2.04104 10.25 1.94554 10.2109 1.86737 10.1326ZM3.79038 10.1326C3.71221 10.0545 3.67313 9.95896 3.67313 9.84613C3.67313 9.73329 3.71221 9.63779 3.79038 9.55963C3.86863 9.48138 3.96412 9.44225 4.07687 9.44225C4.18971 9.44225 4.28525 9.48138 4.3635 9.55963C4.44167 9.63779 4.48075 9.73329 4.48075 9.84613C4.48075 9.95896 4.44167 10.0545 4.3635 10.1326C4.28525 10.2109 4.18971 10.25 4.07687 10.25C3.96412 10.25 3.86863 10.2109 3.79038 10.1326ZM5.7135 10.1326C5.63525 10.0545 5.59613 9.95896 5.59613 9.84613C5.59613 9.73329 5.63525 9.63779 5.7135 9.55963C5.79167 9.48138 5.88717 9.44225 6 9.44225C6.11283 9.44225 6.20833 9.48138 6.2865 9.55963C6.36475 9.63779 6.40387 9.73329 6.40387 9.84613C6.40387 9.95896 6.36475 10.0545 6.2865 10.1326C6.20833 10.2109 6.11283 10.25 6 10.25C5.88717 10.25 5.79167 10.2109 5.7135 10.1326ZM7.6365 10.1326C7.55833 10.0545 7.51925 9.95896 7.51925 9.84613C7.51925 9.73329 7.55833 9.63779 7.6365 9.55963C7.71475 9.48138 7.81029 9.44225 7.92312 9.44225C8.03587 9.44225 8.13138 9.48138 8.20963 9.55963C8.28779 9.63779 8.32688 9.73329 8.32688 9.84613C8.32688 9.95896 8.28779 10.0545 8.20963 10.1326C8.13138 10.2109 8.03587 10.25 7.92312 10.25C7.81029 10.25 7.71475 10.2109 7.6365 10.1326ZM9.55963 10.1326C9.48138 10.0545 9.44225 9.95896 9.44225 9.84613C9.44225 9.73329 9.48138 9.63779 9.55963 9.55963C9.63779 9.48138 9.73329 9.44225 9.84613 9.44225C9.95896 9.44225 10.0545 9.48138 10.1326 9.55963C10.2109 9.63779 10.25 9.73329 10.25 9.84613C10.25 9.95896 10.2109 10.0545 10.1326 10.1326C10.0545 10.2109 9.95896 10.25 9.84613 10.25C9.73329 10.25 9.63779 10.2109 9.55963 10.1326Z" /></svg>`,
+      }
 
-      const renderIssue = (issue, severity) =>
-        `<p class="${severity}" data-id="${issue.nodeId}">${issue.layer} <span class="property">${toSentenceCase(issue.property)}</span> ${issue.problem}${issue.value === undefined ? "" : ` (${issue.value})`}</p>`
+      const FRAME_TYPES = new Set(["FRAME", "GROUP", "COMPONENT", "COMPONENT_SET", "INSTANCE", "SECTION"])
 
-      const renderIssues = (errors, warnings, nothingSelected = false) => {
+      const getLayerIcon = (layerType) => {
+        if (layerType === "TEXT") return LAYER_ICONS.TEXT
+        if (FRAME_TYPES.has(layerType)) return LAYER_ICONS.FRAME
+
+        return LAYER_ICONS.VECTOR
+      }
+
+      // PADDING LEFT reads as "padding left".
+      // The explanation, when there is one, goes on its own muted line under the issue.
+      const renderIssue = (issue, severity) => {
+        const value = issue.value === undefined ? "" : ` (${issue.value})`
+        // A text layer is usually named after its content, so its name is quoted to read as text.
+        const layer = issue.layerType === "TEXT" ? `"${issue.layer}"` : issue.layer
+        const line = `<span class="line">${layer} <span class="property">${issue.property.toLowerCase()}</span> ${issue.problem}${value}</span>`
+        const explanation = issue.explanation === undefined ? "" : `<span class="explanation">${issue.explanation}</span>`
+
+        return `<p class="issue ${severity}" data-id="${issue.nodeId}">${getLayerIcon(issue.layerType)}<span class="text">${line}${explanation}</span></p>`
+      }
+
+      const renderIssues = (errors, warnings, notifications, nothingSelected = false) => {
         let html = `<p class="title">Issues</p>`
 
         if (nothingSelected) {
           html += `<p class="secondary">Nothing selected</p>`
-        } else if (errors.length === 0 && warnings.length === 0) {
+        } else if (errors.length === 0 && warnings.length === 0 && notifications.length === 0) {
           html += `<p class="success">None found</p>`
         }
 
-        for (const e of errors) {
-          html += renderIssue(e, "danger")
+        for (const error of errors) {
+          html += renderIssue(error, "danger")
         }
 
-        for (const w of warnings) {
-          html += renderIssue(w, "warning")
+        for (const warning of warnings) {
+          html += renderIssue(warning, "warning")
         }
 
-        summary.innerHTML = html
+        for (const notification of notifications) {
+          html += renderIssue(notification, "secondary")
+        }
+
+        issues.innerHTML = html
       }
 
       // Nothing is selected until the plugin's first run says otherwise.
@@ -506,8 +568,8 @@
         window.parent.postMessage({ pluginMessage: { type: "back" } }, "*")
       }
 
-      summary.onclick = (e) => {
-        const id = e.target.closest("p[data-id]")?.dataset.id
+      issues.onclick = (event) => {
+        const id = event.target.closest("p[data-id]")?.dataset.id
 
         if (id === undefined) return
 
@@ -516,7 +578,7 @@
       }
 
       window.onmessage = (event) => {
-        const { output, warnings, errors, loading, hint, empty } = event.data.pluginMessage
+        const { output, errors, warnings, notifications, loading, hint, empty } = event.data.pluginMessage
 
         if (hint !== undefined) {
           showHint(hint.text, hint.duration)
@@ -535,12 +597,12 @@
         setNothingSelected(nothingSelected)
 
         if (nothingSelected) {
-          renderIssues([], [], true)
+          renderIssues([], [], [], true)
 
           return
         }
 
-        renderIssues(errors, warnings)
+        renderIssues(errors, warnings, notifications)
         textarea.value = output
       }
     </script>

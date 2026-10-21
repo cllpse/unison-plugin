@@ -1,31 +1,30 @@
 import { readAlignmentText } from "../read/alignment"
 import { readFill } from "../read/fill"
 import { readIdentity } from "../read/identity"
-import { readTypography } from "../read/typography"
-import type { PropertiesErrorOrWarning } from "../types"
+import { readLayerSettings } from "../read/layer"
+import { readTextDecoration, readTypography } from "../read/typography"
+import type { PropertiesAndIssues } from "../types"
+import { combineReads } from "../utilities"
 
-export const serializeText = async (node: TextNode): Promise<PropertiesErrorOrWarning> => {
-  const fill = await readFill(node)
-  const alignment = readAlignmentText(node)
-  const typography = await readTypography(node)
-
+export const serializeText = async (node: TextNode): Promise<PropertiesAndIssues> => {
   // In the order of Figma's right panel, like the rendered flags.
-  const errors = [...typography.errors, ...alignment.errors, ...fill.errors]
-
-  const characters = node.characters
+  const { properties, ...issues } = combineReads([
+    readLayerSettings(node),
+    await readTypography(node),
+    readAlignmentText(node),
+    readTextDecoration(node),
+    await readFill(node),
+  ])
 
   return {
     properties: {
       ...readIdentity(node),
 
-      ...alignment.properties,
-      ...fill.properties,
-      ...typography.properties,
+      ...properties,
 
-      characters,
+      characters: node.characters,
     },
 
-    errors,
-    warnings: [...typography.warnings, ...alignment.warnings, ...fill.warnings],
+    ...issues,
   }
 }

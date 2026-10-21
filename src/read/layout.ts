@@ -1,5 +1,5 @@
 import type { FigmaFrameAutolayout } from "../../unison-components/types/figma"
-import type { Properties, PropertiesErrorOrWarning } from "../types"
+import type { Properties, PropertiesAndIssues } from "../types"
 import { formatValue, truncateName } from "../utilities"
 
 const LAYOUT_MODE_FLAGS: Record<string, keyof FigmaFrameAutolayout> = {
@@ -7,7 +7,7 @@ const LAYOUT_MODE_FLAGS: Record<string, keyof FigmaFrameAutolayout> = {
   VERTICAL: "autolayout-vertical",
 }
 
-export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOrWarning => {
+export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesAndIssues => {
   const flag = LAYOUT_MODE_FLAGS[node.layoutMode]
 
   if (!flag) {
@@ -20,6 +20,7 @@ export const readLayout = (node: SceneNode & AutoLayoutMixin): PropertiesErrorOr
           property: "AUTO LAYOUT",
           problem: "missing",
           value: formatValue(node.layoutMode),
+          explanation: "Without auto layout, this frame's layers can't be placed.",
         },
       ],
       warnings: [],

@@ -1,4 +1,4 @@
-import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import type { Issue, Properties, PropertiesAndIssues } from "../types"
 import { formatValue, truncateName } from "../utilities"
 import { resolveBoundRadiusClass } from "./unit"
 
@@ -12,7 +12,7 @@ type DiscreteCorner = {
 const hasDiscreteCorners = (node: SceneNode & CornerMixin): node is SceneNode & CornerMixin & RectangleCornerMixin =>
   "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node
 
-const getCornerError = (node: SceneNode, problem: string, value: number, label?: string): ErrorOrWarning => ({
+const getCornerError = (node: SceneNode, problem: string, value: number, label?: string): Issue => ({
   nodeId: node.id,
   layer: truncateName(node.name),
   property: label ? `CORNER RADIUS ${label}` : "CORNER RADIUS",
@@ -26,7 +26,7 @@ const emitCorner = async (
   value: number,
   bound: VariableAlias | undefined,
   properties: Properties,
-  errors: ErrorOrWarning[],
+  errors: Issue[],
   label?: string,
 ) => {
   if (value > 0 && bound === undefined) {
@@ -55,9 +55,9 @@ const emitCorner = async (
 
 const readDiscreteCorners = async (
   node: SceneNode & CornerMixin & RectangleCornerMixin,
-): Promise<PropertiesErrorOrWarning> => {
+): Promise<PropertiesAndIssues> => {
   const properties: Properties = {}
-  const errors: ErrorOrWarning[] = []
+  const errors: Issue[] = []
 
   const corners: DiscreteCorner[] = [
     {
@@ -140,7 +140,7 @@ const readDiscreteCorners = async (
   return { properties, errors, warnings: [] }
 }
 
-export const readCornerRadius = async (node: SceneNode & CornerMixin): Promise<PropertiesErrorOrWarning> => {
+export const readCornerRadius = async (node: SceneNode & CornerMixin): Promise<PropertiesAndIssues> => {
   if (hasDiscreteCorners(node)) return readDiscreteCorners(node)
 
   if (node.cornerRadius === figma.mixed) {
@@ -152,7 +152,7 @@ export const readCornerRadius = async (node: SceneNode & CornerMixin): Promise<P
   }
 
   const properties: Properties = {}
-  const errors: ErrorOrWarning[] = []
+  const errors: Issue[] = []
 
   if (node.cornerRadius > 0) {
     await emitCorner(node, "corner-radius-", node.cornerRadius, node.boundVariables?.topLeftRadius, properties, errors)

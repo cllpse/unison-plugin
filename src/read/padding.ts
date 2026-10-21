@@ -1,10 +1,10 @@
-import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import type { Issue, Properties, PropertiesAndIssues } from "../types"
 import { formatValue, truncateName } from "../utilities"
 import { resolveBoundUnitClass } from "./unit"
 
-export const readPadding = async (node: SceneNode & AutoLayoutMixin): Promise<PropertiesErrorOrWarning> => {
+export const readPadding = async (node: SceneNode & AutoLayoutMixin): Promise<PropertiesAndIssues> => {
   const properties: Properties = {}
-  const errors: ErrorOrWarning[] = []
+  const errors: Issue[] = []
   const { paddingLeft: left, paddingRight: right, paddingTop: top, paddingBottom: bottom } = node
   const bound = node.boundVariables
 

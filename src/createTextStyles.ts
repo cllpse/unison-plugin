@@ -8,9 +8,7 @@ const DEFAULT_FONT: FontName = { family: "Inter", style: "Regular" }
 type Size = { "font-size"?: Variable; "line-height"?: Variable }
 
 export const createTextStyles = async (): Promise<string> => {
-  if (figma.editorType !== "figma") {
-    return "Text styles need the Figma editor."
-  }
+  if (figma.editorType !== "figma") return "Text styles need the Figma editor."
 
   const sizes = new Map<string, Size>()
 
@@ -26,9 +24,7 @@ export const createTextStyles = async (): Promise<string> => {
     sizes.set(name, size)
   }
 
-  if (sizes.size === 0) {
-    return "No font-size variables found."
-  }
+  if (sizes.size === 0) return "No font-size variables found."
 
   const styles = await figma.getLocalTextStylesAsync()
   let created = 0
@@ -40,7 +36,7 @@ export const createTextStyles = async (): Promise<string> => {
   for (const [name, size] of sizes) {
     const fontSize = size["font-size"]
 
-    if (!fontSize) continue
+    if (fontSize === undefined) continue
 
     const existing = styles.find((style) => style.name === `text-${name}`)
     const style = existing ?? figma.createTextStyle()
@@ -49,9 +45,7 @@ export const createTextStyles = async (): Promise<string> => {
 
     await figma.loadFontAsync(existing ? style.fontName : DEFAULT_FONT)
 
-    if (!existing) {
-      style.fontName = DEFAULT_FONT
-    }
+    if (existing === undefined) style.fontName = DEFAULT_FONT
 
     style.setBoundVariable("fontSize", fontSize)
     style.setBoundVariable("lineHeight", size["line-height"] ?? null)
@@ -60,11 +54,8 @@ export const createTextStyles = async (): Promise<string> => {
 
     previous = style
 
-    if (existing) {
-      updated++
-    } else {
-      created++
-    }
+    if (existing) updated++
+    if (existing === undefined) created++
   }
 
   return `Text styles: ${created} created, ${updated} updated.`

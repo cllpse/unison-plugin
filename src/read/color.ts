@@ -1,6 +1,6 @@
 import { resolveColorToken } from "../maps"
-import type { PropertiesErrorOrWarning } from "../types"
-import { formatValue, RGBToHEX, truncateName } from "../utilities"
+import type { PropertiesAndIssues } from "../types"
+import { convertRgbToHex, formatValue, truncateName } from "../utilities"
 import { getVariable } from "./variable"
 
 const resolveBoundPaintColor = async (
@@ -12,31 +12,56 @@ const resolveBoundPaintColor = async (
   const token = resolveColorToken(variable?.name)
   const className = token === undefined ? undefined : `${prefix}${token}`
 
-  return { className, label: variable?.name ?? RGBToHEX(paint.color) }
+  return { className, label: variable?.name ?? convertRgbToHex(paint.color) }
 }
 
-/** A layer's fill or stroke paint as a `fill-` / `stroke-` color flag: solid, bound to a variable and visible. */
-export const readPaint = async (
+/**
+ * A layer's fills or strokes as a `fill-` / `stroke-` color flag: one visible paint, solid and bound to a color token.
+ * Hidden paints are left out, as Figma does.
+ */
+export const readPaints = async (
   node: SceneNode,
   kind: "FILL" | "STROKE",
-  paint: Paint | undefined,
-): Promise<PropertiesErrorOrWarning> => {
-  const name = kind.toLowerCase()
+  paints: ReadonlyArray<Paint>,
+): Promise<PropertiesAndIssues> => {
+  const layer = truncateName(node.name)
+  const visiblePaints = paints.filter((paint) => paint.visible !== false)
+  const paint = visiblePaints[0] ?? paints[0]
 
   if (paint === undefined) return { properties: {}, errors: [], warnings: [] }
 
-  if (paint.type !== "SOLID") {
+  if (visiblePaints.length > 1) {
     return {
       properties: {},
       errors: [
         {
           nodeId: node.id,
-          layer: truncateName(node.name),
-          property: `${kind}`,
-          problem: "unsupported",
-          value: formatValue(paint.type),
+          layer,
+          property: kind,
+          problem: "mixed",
+          value: visiblePaints.length,
+          explanation: `Only one can be a flag, so the ${kind.toLowerCase()} is left out.`,
         },
       ],
+      warnings: [],
+    }
+  }
+
+  if (paint.visible === false) {
+    const value = paint.type === "SOLID" ? (await resolveBoundPaintColor("", paint)).label : formatValue(paint.type)
+
+    return {
+      properties: {},
+      errors: [],
+      warnings: [],
+      notifications: [{ nodeId: node.id, layer, property: kind, problem: "hidden, skipped", value }],
+    }
+  }
+
+  if (paint.type !== "SOLID") {
+    return {
+      properties: {},
+      errors: [{ nodeId: node.id, layer, property: kind, problem: "unsupported", value: formatValue(paint.type) }],
       warnings: [],
     }
   }
@@ -44,38 +69,36 @@ export const readPaint = async (
   if (paint.boundVariables?.color === undefined) {
     return {
       properties: {},
-      errors: [
-        {
-          nodeId: node.id,
-          layer: truncateName(node.name),
-          property: `${kind}`,
-          problem: "not bound",
-          value: RGBToHEX(paint.color),
-        },
-      ],
+      errors: [{ nodeId: node.id, layer, property: kind, problem: "not bound", value: convertRgbToHex(paint.color) }],
       warnings: [],
     }
   }
 
-  const { className, label } = await resolveBoundPaintColor(`${name}-`, paint)
+  const { className, label } = await resolveBoundPaintColor(`${kind.toLowerCase()}-`, paint)
 
-  if (!paint.visible) {
+  if (className === undefined) {
     return {
       properties: {},
-      errors: [],
-      warnings: [
-        { nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: "hidden", value: label },
-      ],
+      errors: [{ nodeId: node.id, layer, property: kind, problem: "not a token", value: label }],
+      warnings: [],
     }
   }
 
-  if (className) return { properties: { [className]: true }, errors: [], warnings: [] }
+  // The library has no opacity flag, so the color is used at full strength.
+  const opacity = paint.opacity ?? 1
+  const warnings =
+    opacity < 1
+      ? [
+          {
+            nodeId: node.id,
+            layer,
+            property: `${kind} OPACITY`,
+            problem: "unsupported",
+            value: `${Math.round(opacity * 100)}%`,
+            explanation: "Rendered at full opacity.",
+          },
+        ]
+      : []
 
-  return {
-    properties: {},
-    errors: [
-      { nodeId: node.id, layer: truncateName(node.name), property: `${kind}`, problem: "not a token", value: label },
-    ],
-    warnings: [],
-  }
+  return { properties: { [className]: true }, errors: [], warnings }
 }

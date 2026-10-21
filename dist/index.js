@@ -19,6 +19,18 @@
     return a;
   };
   var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+  var __objRest = (source, exclude) => {
+    var target = {};
+    for (var prop in source)
+      if (__hasOwnProp.call(source, prop) && exclude.indexOf(prop) < 0)
+        target[prop] = source[prop];
+    if (source != null && __getOwnPropSymbols)
+      for (var prop of __getOwnPropSymbols(source)) {
+        if (exclude.indexOf(prop) < 0 && __propIsEnum.call(source, prop))
+          target[prop] = source[prop];
+      }
+    return target;
+  };
 
   // src/createShadowStyles.ts
   var SHADOW_VARIABLE = /^shadow-([^-]+)-(\d+)-(offset-x|offset-y|blur|spread|color)$/;
@@ -29,16 +41,14 @@
     spread: "spread",
     color: "color"
   };
-  var modeValue = (variable) => variable ? Object.values(variable.valuesByMode)[0] : void 0;
+  var modeValue = (variable) => variable === void 0 ? void 0 : Object.values(variable.valuesByMode)[0];
   var numberOf = (variable) => {
     const value = modeValue(variable);
     return typeof value === "number" ? value : 0;
   };
   var colorOf = (variable) => {
     const value = modeValue(variable);
-    if (value && typeof value === "object" && "r" in value) {
-      return __spreadValues({ a: 1 }, value);
-    }
+    if (value && typeof value === "object" && "r" in value) return __spreadValues({ a: 1 }, value);
     return { r: 0, g: 0, b: 0, a: 0.1 };
   };
   var buildEffect = (layer) => {
@@ -52,17 +62,14 @@
       color: colorOf(layer.color)
     };
     for (const [field, variable] of Object.entries(layer)) {
-      if (variable) {
-        effect = figma.variables.setBoundVariableForEffect(effect, FIELDS[field], variable);
-      }
+      if (variable === void 0) continue;
+      effect = figma.variables.setBoundVariableForEffect(effect, FIELDS[field], variable);
     }
     return effect;
   };
   var createShadowStyles = async () => {
     var _a3, _b;
-    if (figma.editorType !== "figma") {
-      return "Shadow styles need the Figma editor.";
-    }
+    if (figma.editorType !== "figma") return "Shadow styles need the Figma editor.";
     const shadows = /* @__PURE__ */ new Map();
     for (const variable of await figma.variables.getLocalVariablesAsync()) {
       const match = variable.name.match(SHADOW_VARIABLE);
@@ -74,9 +81,7 @@
       layers.set(Number(index), layer);
       shadows.set(name, layers);
     }
-    if (shadows.size === 0) {
-      return "No shadow variables found.";
-    }
+    if (shadows.size === 0) return "No shadow variables found.";
     const styles = await figma.getLocalEffectStylesAsync();
     let created = 0;
     let updated = 0;
@@ -85,14 +90,11 @@
       const existing = styles.find((style2) => style2.name === "shadow-".concat(name));
       const style = existing != null ? existing : figma.createEffectStyle();
       style.name = "shadow-".concat(name);
-      style.effects = [...layers.entries()].sort(([a], [b]) => a - b).map(([, layer]) => buildEffect(layer));
+      style.effects = [...layers.entries()].sort(([indexA], [indexB]) => indexA - indexB).map(([, layer]) => buildEffect(layer));
       if (previous) figma.moveLocalEffectStyleAfter(style, previous);
       previous = style;
-      if (existing) {
-        updated++;
-      } else {
-        created++;
-      }
+      if (existing) updated++;
+      if (existing === void 0) created++;
     }
     return "Shadow styles: ".concat(created, " created, ").concat(updated, " updated.");
   };
@@ -102,9 +104,7 @@
   var DEFAULT_FONT = { family: "Inter", style: "Regular" };
   var createTextStyles = async () => {
     var _a3, _b;
-    if (figma.editorType !== "figma") {
-      return "Text styles need the Figma editor.";
-    }
+    if (figma.editorType !== "figma") return "Text styles need the Figma editor.";
     const sizes = /* @__PURE__ */ new Map();
     for (const variable of await figma.variables.getLocalVariablesAsync("FLOAT")) {
       const match = variable.name.match(TYPOGRAPHY_VARIABLE);
@@ -114,32 +114,25 @@
       size[field] = variable;
       sizes.set(name, size);
     }
-    if (sizes.size === 0) {
-      return "No font-size variables found.";
-    }
+    if (sizes.size === 0) return "No font-size variables found.";
     const styles = await figma.getLocalTextStylesAsync();
     let created = 0;
     let updated = 0;
     let previous = null;
     for (const [name, size] of sizes) {
       const fontSize = size["font-size"];
-      if (!fontSize) continue;
+      if (fontSize === void 0) continue;
       const existing = styles.find((style2) => style2.name === "text-".concat(name));
       const style = existing != null ? existing : figma.createTextStyle();
       style.name = "text-".concat(name);
       await figma.loadFontAsync(existing ? style.fontName : DEFAULT_FONT);
-      if (!existing) {
-        style.fontName = DEFAULT_FONT;
-      }
+      if (existing === void 0) style.fontName = DEFAULT_FONT;
       style.setBoundVariable("fontSize", fontSize);
       style.setBoundVariable("lineHeight", (_b = size["line-height"]) != null ? _b : null);
       if (previous) figma.moveLocalTextStyleAfter(style, previous);
       previous = style;
-      if (existing) {
-        updated++;
-      } else {
-        created++;
-      }
+      if (existing) updated++;
+      if (existing === void 0) created++;
     }
     return "Text styles: ".concat(created, " created, ").concat(updated, " updated.");
   };
@@ -171,18 +164,18 @@
     const numberScales = new Set(
       scales.filter((scale) => children.every(([key, node]) => scaleOf(key) !== scale || isNumberToken(node)))
     );
-    children.sort(([keyA, a], [keyB, b]) => {
+    children.sort(([keyA, nodeA], [keyB, nodeB]) => {
       const scale = scales.indexOf(scaleOf(keyA)) - scales.indexOf(scaleOf(keyB));
       if (scale !== 0 || !numberScales.has(scaleOf(keyA))) return scale;
-      return Number(a.get("$value")) - Number(b.get("$value"));
+      return Number(nodeA.get("$value")) - Number(nodeB.get("$value"));
     });
     for (const [key, node] of children) {
       const name = "".concat(path).concat(key);
       if (node.has("$value")) {
         tokens.set(name, toObject(node));
-      } else {
-        flatten(node, "".concat(name, "/"), tokens);
+        continue;
       }
+      flatten(node, "".concat(name, "/"), tokens);
     }
     return tokens;
   };
@@ -200,18 +193,14 @@
   };
   var importVariables = async (text) => {
     var _a3, _b, _c, _d;
-    if (figma.editorType !== "figma") {
-      return "Variables need the Figma editor.";
-    }
+    if (figma.editorType !== "figma") return "Variables need the Figma editor.";
     let file;
     try {
       file = typeof text === "string" ? parseOrdered(text) : void 0;
     } catch (e) {
       file = void 0;
     }
-    if (!(file instanceof Map)) {
-      throw new Error("not a design tokens file.");
-    }
+    if (!(file instanceof Map)) throw new Error("not a design tokens file.");
     const collectionsInFile = [...file].map(([name, modes]) => ({
       name,
       modes: modes instanceof Map ? [...modes.values()].filter((mode) => mode instanceof Map) : []
@@ -225,10 +214,10 @@
     let updated = 0;
     for (const { name, modes } of collectionsInFile) {
       const collection = (_a3 = collections.find((existing) => existing.name === name)) != null ? _a3 : figma.variables.createVariableCollection(name);
-      const modeIds = modes.map((mode, i) => {
-        const existing = collection.modes.find((m) => m.name === modeName(mode));
-        if (existing) return existing.modeId;
-        if (i === 0) {
+      const modeIds = modes.map((mode, index) => {
+        const existing = collection.modes.find((collectionMode) => collectionMode.name === modeName(mode));
+        if (existing !== void 0) return existing.modeId;
+        if (index === 0) {
           collection.renameMode(collection.defaultModeId, modeName(mode));
           return collection.defaultModeId;
         }
@@ -239,83 +228,31 @@
       const tokensByMode = modes.map((mode) => flatten(mode));
       for (const [variableName, token] of tokensByMode[0]) {
         const type = TYPES[token.$type];
-        if (!type) continue;
+        if (type === void 0) continue;
         let variable = byName.get(variableName);
-        if (variable && variable.resolvedType !== type) {
+        if (variable !== void 0 && variable.resolvedType !== type) {
           variable.remove();
           variable = void 0;
         }
-        if (variable) {
-          updated++;
-        } else {
-          variable = figma.variables.createVariable(variableName, collection, type);
-          created++;
-        }
+        if (variable) updated++;
+        if (variable === void 0) created++;
+        variable != null ? variable : variable = figma.variables.createVariable(variableName, collection, type);
         variable.scopes = (_c = (_b = token.$extensions) == null ? void 0 : _b["com.figma.scopes"]) != null ? _c : ["ALL_SCOPES"];
-        for (const [i, tokens] of tokensByMode.entries()) {
-          variable.setValueForMode(modeIds[i], valueOfToken((_d = tokens.get(variableName)) != null ? _d : token));
+        for (const [index, tokens] of tokensByMode.entries()) {
+          variable.setValueForMode(modeIds[index], valueOfToken((_d = tokens.get(variableName)) != null ? _d : token));
         }
       }
     }
     return "Variables: ".concat(created, " created, ").concat(updated, " updated.");
   };
 
-  // src/serialize/annotationExclude.ts
-  var EXCLUDE_MARK = "EXCLUDE_FROM_OUTPUT";
-  var normalizeExcludeToken = (s) => (s != null ? s : "").trim().toUpperCase();
-  var annotationMatchesExcludeFromOutput = (a, annotationCategories) => {
-    if (normalizeExcludeToken(a.label) === EXCLUDE_MARK) return true;
-    if (a.labelMarkdown && normalizeExcludeToken(a.labelMarkdown.replace(/<[^>]+>/g, " ")) === EXCLUDE_MARK) return true;
-    if (a.categoryId === void 0) return false;
-    return (annotationCategories != null ? annotationCategories : []).some(
-      (c) => c.id === a.categoryId && normalizeExcludeToken(c.label) === EXCLUDE_MARK
-    );
-  };
-  var hasExcludeFromOutputAnnotation = (annotations, annotationCategories) => (annotations != null ? annotations : []).some((a) => annotationMatchesExcludeFromOutput(a, annotationCategories));
-  var findNearestInstanceAncestor = (node) => {
-    let walk = node;
-    while (walk) {
-      if (walk.type === "INSTANCE") return walk;
-      walk = walk.parent;
-    }
-    return null;
-  };
-  var getMainDefinitionLayerForNode = async (node, getMainComponent) => {
-    const instance = findNearestInstanceAncestor(node);
-    if (instance === null) return null;
-    if (node === instance) return getMainComponent(instance);
-    const path = [];
-    let current = node;
-    while (true) {
-      const parent = current.parent;
-      if (parent === null) return null;
-      if (!("children" in parent)) return null;
-      const siblings = parent.children;
-      const index = siblings.indexOf(current);
-      if (index < 0) return null;
-      path.unshift(index);
-      if (parent === instance) break;
-      current = parent;
-    }
-    const main = await getMainComponent(instance);
-    if (main === null) return null;
-    let definition = main;
-    for (const i of path) {
-      if (!("children" in definition)) return null;
-      const nextChildren = definition.children;
-      if (i >= nextChildren.length) return null;
-      definition = nextChildren[i];
-    }
-    return definition;
-  };
-
   // src/utilities.ts
-  var toHex = (n) => {
-    const clamped = Math.max(0, Math.min(255, Math.round(n)));
+  var formatHexByte = (value) => {
+    const clamped = Math.max(0, Math.min(255, Math.round(value)));
     const hex = clamped.toString(16).toUpperCase();
     return hex.length === 1 ? "0".concat(hex) : hex;
   };
-  var RGBToHEX = (rgb) => "#".concat(toHex(rgb.r * 255)).concat(toHex(rgb.g * 255)).concat(toHex(rgb.b * 255));
+  var convertRgbToHex = (rgb) => "#".concat(formatHexByte(rgb.r * 255)).concat(formatHexByte(rgb.g * 255)).concat(formatHexByte(rgb.b * 255));
   var INDENT = " ".repeat(4);
   var META_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "children", "characters"]);
   var STRING_PROP_KEYS = {
@@ -355,9 +292,9 @@
   var getPanelRank = (flag) => {
     let rank = PANEL_ORDER.length;
     let length = 0;
-    for (const [i, prefix] of PANEL_ORDER.entries()) {
+    for (const [index, prefix] of PANEL_ORDER.entries()) {
       if (flag.startsWith(prefix) && prefix.length > length) {
-        rank = i;
+        rank = index;
         length = prefix.length;
       }
     }
@@ -365,16 +302,16 @@
   };
   var compareByPanelOrder = (a, b) => getPanelRank(a) - getPanelRank(b) || a.localeCompare(b);
   var SKIP_WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
-  var getFlagKeys = (properties) => Object.keys(properties).filter((k) => !META_KEYS.has(k) && properties[k] === true);
+  var getFlagKeys = (properties) => Object.keys(properties).filter((key) => !META_KEYS.has(key) && properties[key] === true);
   var formatOpenTag = (tag, properties, indentation, selfClosing) => {
     var _a3;
     const flags = getFlagKeys(properties).sort(compareByPanelOrder);
-    const attributes = ((_a3 = STRING_PROP_KEYS[tag]) != null ? _a3 : []).filter((k) => typeof properties[k] === "string").map((k) => "".concat(k, '="').concat(properties[k], '"'));
+    const attributes = ((_a3 = STRING_PROP_KEYS[tag]) != null ? _a3 : []).filter((key) => typeof properties[key] === "string").map((key) => "".concat(key, '="').concat(properties[key], '"'));
     const keys = [...flags, ...attributes];
     if (keys.length === 0) return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
     const lines = [
       "".concat(indentation, "<").concat(tag),
-      ...keys.map((k) => "".concat(indentation, "  ").concat(k)),
+      ...keys.map((key) => "".concat(indentation, "  ").concat(key)),
       selfClosing ? "".concat(indentation, "/>") : "".concat(indentation, ">")
     ];
     return lines.join("\n");
@@ -403,10 +340,70 @@
     const inner = renderChildren(children, "".concat(indentation).concat(INDENT));
     return [open, ...inner.length > 0 ? [inner] : [], "".concat(indentation, "</").concat(tag, ">")].join("\n");
   };
-  var renderComponentCode = (json) => renderNode(json, "");
-  var formatValue = (value) => typeof value === "number" ? Math.round(value * 100) / 100 : value.toLowerCase().replace(/_/g, " ");
+  var renderComponentCode = (tree) => renderNode(tree, "");
+  var formatValue = (value, unit = "px") => typeof value === "number" ? "".concat(Math.round(value * 100) / 100).concat(unit) : value.toLowerCase().replace(/_/g, " ");
   var MAX_NAME_LENGTH = 15;
   var truncateName = (name) => name.length > MAX_NAME_LENGTH ? "".concat(name.slice(0, MAX_NAME_LENGTH), "\u2026") : name;
+  var combineReads = (reads) => ({
+    properties: Object.assign({}, ...reads.map((read) => read.properties)),
+    errors: reads.flatMap((read) => read.errors),
+    warnings: reads.flatMap((read) => read.warnings),
+    notifications: reads.flatMap((read) => {
+      var _a3;
+      return (_a3 = read.notifications) != null ? _a3 : [];
+    })
+  });
+
+  // src/serialize/annotationExclude.ts
+  var EXCLUDE_MARK = "EXCLUDE_FROM_OUTPUT";
+  var normalizeExcludeToken = (text) => (text != null ? text : "").trim().toUpperCase();
+  var matchesExcludeFromOutput = (annotation, annotationCategories) => {
+    var _a3;
+    const markdownLabel = (_a3 = annotation.labelMarkdown) == null ? void 0 : _a3.replace(/<[^>]+>/g, " ");
+    if (normalizeExcludeToken(annotation.label) === EXCLUDE_MARK) return true;
+    if (markdownLabel && normalizeExcludeToken(markdownLabel) === EXCLUDE_MARK) return true;
+    if (annotation.categoryId === void 0) return false;
+    return (annotationCategories != null ? annotationCategories : []).some(
+      (category) => category.id === annotation.categoryId && normalizeExcludeToken(category.label) === EXCLUDE_MARK
+    );
+  };
+  var hasExcludeFromOutputAnnotation = (annotations, annotationCategories) => (annotations != null ? annotations : []).some((annotation) => matchesExcludeFromOutput(annotation, annotationCategories));
+  var findNearestInstanceAncestor = (node) => {
+    let current = node;
+    while (current !== null) {
+      if (current.type === "INSTANCE") return current;
+      current = current.parent;
+    }
+    return null;
+  };
+  var getMainDefinitionLayerForNode = async (node, getMainComponent) => {
+    const instance = findNearestInstanceAncestor(node);
+    if (instance === null) return null;
+    if (node === instance) return getMainComponent(instance);
+    const path = [];
+    let current = node;
+    while (true) {
+      const parent = current.parent;
+      if (parent === null) return null;
+      if (!("children" in parent)) return null;
+      const siblings = parent.children;
+      const index = siblings.indexOf(current);
+      if (index < 0) return null;
+      path.unshift(index);
+      if (parent === instance) break;
+      current = parent;
+    }
+    const main = await getMainComponent(instance);
+    if (main === null) return null;
+    let definition = main;
+    for (const index of path) {
+      if (!("children" in definition)) return null;
+      const nextChildren = definition.children;
+      if (index >= nextChildren.length) return null;
+      definition = nextChildren[index];
+    }
+    return definition;
+  };
 
   // src/read/alignment.ts
   var FRAME_ALIGNMENT = {
@@ -463,16 +460,17 @@
     }
     return {
       properties: {},
-      errors: [
+      errors: [],
+      warnings: [
         {
           nodeId: node.id,
           layer: truncateName(node.name),
           property: "TEXT ALIGNMENT",
           problem: "must be left, center or right",
-          value: formatValue(alignment)
+          value: formatValue(alignment),
+          explanation: "Rendered left aligned."
         }
-      ],
-      warnings: []
+      ]
     };
   };
 
@@ -834,6 +832,70 @@
     "8xl",
     "9xl"
   ];
+  var EASINGS = {
+    linear: "linear",
+    in: [0.4, 0, 1, 1],
+    out: [0, 0, 0.2, 1],
+    "in-out": [0.4, 0, 0.2, 1]
+  };
+  var TRANSITION_DURATIONS = {
+    "0": 0,
+    "75": 75,
+    "100": 100,
+    "150": 150,
+    "200": 200,
+    "300": 300,
+    "500": 500,
+    "700": 700,
+    "1000": 1e3
+  };
+  var TRANSITION_DELAYS = {
+    "0": 0,
+    "75": 75,
+    "100": 100,
+    "150": 150,
+    "200": 200,
+    "300": 300,
+    "500": 500,
+    "700": 700,
+    "1000": 1e3
+  };
+  var TRANSITION_PROPERTIES = {
+    colors: ["color", "backgroundColor", "borderColor", "outlineColor", "textDecorationColor"],
+    opacity: ["opacity"],
+    shadow: ["boxShadow"],
+    transform: ["transform"]
+  };
+  var ANIMATIONS = {
+    spin: {
+      duration: 1e3,
+      easing: "linear",
+      iterationCount: "infinite",
+      keyframes: { "100%": { transform: [{ rotate: "360deg" }] } }
+    },
+    ping: {
+      duration: 1e3,
+      easing: [0, 0, 0.2, 1],
+      iterationCount: "infinite",
+      keyframes: { "75%": { transform: [{ scale: 2 }], opacity: 0 }, "100%": { transform: [{ scale: 2 }], opacity: 0 } }
+    },
+    pulse: {
+      duration: 2e3,
+      easing: [0.4, 0, 0.6, 1],
+      iterationCount: "infinite",
+      keyframes: { "50%": { opacity: 0.5 } }
+    },
+    bounce: {
+      duration: 1e3,
+      easing: "ease",
+      iterationCount: "infinite",
+      keyframes: {
+        "0%": { transform: [{ translateY: "-25%" }], animationTimingFunction: [0.8, 0, 1, 1] },
+        "50%": { transform: [{ translateY: 0 }], animationTimingFunction: [0, 0, 0.2, 1] },
+        "100%": { transform: [{ translateY: "-25%" }], animationTimingFunction: [0.8, 0, 1, 1] }
+      }
+    }
+  };
 
   // unison-components/maps/index.ts
   var SPACING_GROUPS = [
@@ -856,6 +918,13 @@
     ["corner-radius-bottom-right", "rounded-br"]
   ];
   var COLOR_GROUPS = ["fill", "fill-hover", "stroke", "stroke-hover"];
+  var MOTION_GROUPS = [
+    ["transition", "transition", TRANSITION_PROPERTIES],
+    ["transition-duration", "duration", TRANSITION_DURATIONS],
+    ["transition-delay", "delay", TRANSITION_DELAYS],
+    ["transition-easing", "ease", EASINGS],
+    ["tailwind-animate", "motion-safe:animate", ANIMATIONS]
+  ];
   var SIZE_MODES = ["fill", "hug"];
   var NAMED_FLAGS = {
     autolayout: ["autolayout-horizontal", "autolayout-vertical"],
@@ -874,7 +943,8 @@
     "stroke-style": ["stroke-style-dashed", "stroke-style-solid"],
     "typography-align": ["typography-align-left", "typography-align-center", "typography-align-right"],
     "typography-decoration": ["typography-decoration-underline"],
-    "pointer-events": ["pointer-events-none", "pointer-events-auto"]
+    "pointer-events": ["pointer-events-none", "pointer-events-auto"],
+    tailwind: ["tailwind-group", "tailwind-group-hover-fill"]
   };
   var table = /* @__PURE__ */ new Map();
   var add = (name, flag) => table.set(name, Object.freeze(flag));
@@ -891,6 +961,9 @@
   }
   for (const name of SHADOWS) add("effect-shadow-".concat(name), { group: "effect-shadow", className: "shadow-".concat(name) });
   for (const size of TEXT_SIZES) add("typography-".concat(size), { group: "typography", className: "text-".concat(size) });
+  for (const [group, prefix, scale] of MOTION_GROUPS) {
+    for (const key of Object.keys(scale)) add("".concat(group, "-").concat(key), { group, className: "".concat(prefix, "-").concat(key), key });
+  }
   var _a2;
   for (const axis of ["width", "height"]) {
     for (const key of Object.keys(SPACING)) {
@@ -956,7 +1029,7 @@
   var VARIABLE_BY_ID_CACHE = /* @__PURE__ */ new Map();
   var getVariable = (id) => {
     const existing = VARIABLE_BY_ID_CACHE.get(id);
-    if (existing) return existing;
+    if (existing !== void 0) return existing;
     const next = figma.variables.getVariableByIdAsync(id);
     VARIABLE_BY_ID_CACHE.set(id, next);
     return next;
@@ -1166,16 +1239,17 @@
     if (node.effectStyleId === "") {
       return {
         properties: {},
-        errors: [],
-        warnings: [
+        errors: [
           {
             nodeId: node.id,
             layer: truncateName(node.name),
             property: "EFFECT",
-            problem: "not bound, skipped",
-            value: formatValue((_b = (_a3 = node.effects.find((effect) => effect.visible)) == null ? void 0 : _a3.type) != null ? _b : "")
+            problem: "not bound",
+            value: formatValue((_b = (_a3 = node.effects.find((effect) => effect.visible)) == null ? void 0 : _a3.type) != null ? _b : ""),
+            explanation: "Shadows are read from shadow-* effect styles, so this one is left out."
           }
-        ]
+        ],
+        warnings: []
       };
     }
     const style = await figma.getStyleByIdAsync(node.effectStyleId);
@@ -1205,60 +1279,73 @@
     const variable = id ? await getVariable(id) : null;
     const token = resolveColorToken(variable == null ? void 0 : variable.name);
     const className = token === void 0 ? void 0 : "".concat(prefix).concat(token);
-    return { className, label: (_c = variable == null ? void 0 : variable.name) != null ? _c : RGBToHEX(paint.color) };
+    return { className, label: (_c = variable == null ? void 0 : variable.name) != null ? _c : convertRgbToHex(paint.color) };
   };
-  var readPaint = async (node, kind, paint) => {
-    var _a3;
-    const name = kind.toLowerCase();
+  var readPaints = async (node, kind, paints) => {
+    var _a3, _b, _c;
+    const layer = truncateName(node.name);
+    const visiblePaints = paints.filter((paint2) => paint2.visible !== false);
+    const paint = (_a3 = visiblePaints[0]) != null ? _a3 : paints[0];
     if (paint === void 0) return { properties: {}, errors: [], warnings: [] };
-    if (paint.type !== "SOLID") {
+    if (visiblePaints.length > 1) {
       return {
         properties: {},
         errors: [
           {
             nodeId: node.id,
-            layer: truncateName(node.name),
-            property: "".concat(kind),
-            problem: "unsupported",
-            value: formatValue(paint.type)
+            layer,
+            property: kind,
+            problem: "mixed",
+            value: visiblePaints.length,
+            explanation: "Only one can be a flag, so the ".concat(kind.toLowerCase(), " is left out.")
           }
         ],
         warnings: []
       };
     }
-    if (((_a3 = paint.boundVariables) == null ? void 0 : _a3.color) === void 0) {
-      return {
-        properties: {},
-        errors: [
-          {
-            nodeId: node.id,
-            layer: truncateName(node.name),
-            property: "".concat(kind),
-            problem: "not bound",
-            value: RGBToHEX(paint.color)
-          }
-        ],
-        warnings: []
-      };
-    }
-    const { className, label } = await resolveBoundPaintColor("".concat(name, "-"), paint);
-    if (!paint.visible) {
+    if (paint.visible === false) {
+      const value = paint.type === "SOLID" ? (await resolveBoundPaintColor("", paint)).label : formatValue(paint.type);
       return {
         properties: {},
         errors: [],
-        warnings: [
-          { nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "hidden", value: label }
-        ]
+        warnings: [],
+        notifications: [{ nodeId: node.id, layer, property: kind, problem: "hidden, skipped", value }]
       };
     }
-    if (className) return { properties: { [className]: true }, errors: [], warnings: [] };
-    return {
-      properties: {},
-      errors: [
-        { nodeId: node.id, layer: truncateName(node.name), property: "".concat(kind), problem: "not a token", value: label }
-      ],
-      warnings: []
-    };
+    if (paint.type !== "SOLID") {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, layer, property: kind, problem: "unsupported", value: formatValue(paint.type) }],
+        warnings: []
+      };
+    }
+    if (((_b = paint.boundVariables) == null ? void 0 : _b.color) === void 0) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, layer, property: kind, problem: "not bound", value: convertRgbToHex(paint.color) }],
+        warnings: []
+      };
+    }
+    const { className, label } = await resolveBoundPaintColor("".concat(kind.toLowerCase(), "-"), paint);
+    if (className === void 0) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, layer, property: kind, problem: "not a token", value: label }],
+        warnings: []
+      };
+    }
+    const opacity = (_c = paint.opacity) != null ? _c : 1;
+    const warnings = opacity < 1 ? [
+      {
+        nodeId: node.id,
+        layer,
+        property: "".concat(kind, " OPACITY"),
+        problem: "unsupported",
+        value: "".concat(Math.round(opacity * 100), "%"),
+        explanation: "Rendered at full opacity."
+      }
+    ] : [];
+    return { properties: { [className]: true }, errors: [], warnings };
   };
 
   // src/read/fill.ts
@@ -1266,11 +1353,19 @@
     if (node.fills === figma.mixed) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "FILL", problem: "mixed" }],
+        errors: [
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "FILL",
+            problem: "mixed",
+            explanation: "Parts of the text differ, so the fill is left out."
+          }
+        ],
         warnings: []
       };
     }
-    return readPaint(node, "FILL", node.fills[0]);
+    return readPaints(node, "FILL", node.fills);
   };
 
   // src/read/gap.ts
@@ -1312,12 +1407,37 @@
   };
 
   // src/read/identity.ts
-  var readIdentity = (node) => {
-    return {
-      id: node.id,
-      type: node.type,
-      name: node.name
-    };
+  var readIdentity = (node) => ({
+    id: node.id,
+    type: node.type,
+    name: node.name
+  });
+
+  // src/read/layer.ts
+  var SIZE_LIMITS = [
+    ["minWidth", "MIN WIDTH"],
+    ["maxWidth", "MAX WIDTH"],
+    ["minHeight", "MIN HEIGHT"],
+    ["maxHeight", "MAX HEIGHT"]
+  ];
+  var readLayerSettings = (node) => {
+    const layer = truncateName(node.name);
+    const warnings = [];
+    const warn = (property, value, explanation) => warnings.push({ nodeId: node.id, layer, property, problem: "unsupported", value, explanation });
+    if ("opacity" in node && node.opacity < 1) {
+      warn("OPACITY", "".concat(Math.round(node.opacity * 100), "%"), "Rendered fully opaque.");
+    }
+    if ("rotation" in node && Math.abs(node.rotation) >= 0.01) {
+      warn("ROTATION", formatValue(node.rotation, "deg"), "Rendered without rotation.");
+    }
+    if ("layoutPositioning" in node && node.layoutPositioning === "ABSOLUTE") {
+      warn("POSITION", "absolute", "Placed in its parent's auto layout flow.");
+    }
+    for (const [key, property] of SIZE_LIMITS) {
+      const limit = key in node ? node[key] : null;
+      if (limit !== null) warn(property, formatValue(limit), "Min and max sizes have no flag, so this limit is left out.");
+    }
+    return { properties: {}, errors: [], warnings };
   };
 
   // src/read/layout.ts
@@ -1336,7 +1456,8 @@
             layer: truncateName(node.name),
             property: "AUTO LAYOUT",
             problem: "missing",
-            value: formatValue(node.layoutMode)
+            value: formatValue(node.layoutMode),
+            explanation: "Without auto layout, this frame's layers can't be placed."
           }
         ],
         warnings: []
@@ -1445,72 +1566,79 @@
 
   // src/read/stroke.ts
   var readStroke = async (node) => {
-    if (node.strokes.length > 1) {
-      return {
-        properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "STROKE", problem: "mixed" }],
-        warnings: []
-      };
+    const result = await readPaints(node, "STROKE", node.strokes);
+    if (!Object.keys(result.properties).some((key) => key.startsWith("stroke-"))) return result;
+    const layer = truncateName(node.name);
+    const warnings = [...result.warnings];
+    if (node.strokeWeight !== 1) {
+      warnings.push({
+        nodeId: node.id,
+        layer,
+        property: "STROKE WEIGHT",
+        problem: "must be 1",
+        explanation: "Rendered 1px wide.",
+        value: node.strokeWeight === figma.mixed ? "mixed" : formatValue(node.strokeWeight)
+      });
     }
-    return readPaint(node, "STROKE", node.strokes[0]);
+    if (node.strokeAlign !== "INSIDE") {
+      warnings.push({
+        nodeId: node.id,
+        layer,
+        property: "STROKE POSITION",
+        problem: "must be inside",
+        explanation: "Rendered on the inside of the layer.",
+        value: formatValue(node.strokeAlign)
+      });
+    }
+    const dashed = node.dashPattern.length > 0;
+    return __spreadProps(__spreadValues({}, result), {
+      properties: __spreadValues(__spreadValues({}, result.properties), dashed ? { "stroke-style-dashed": true } : {}),
+      warnings
+    });
   };
 
   // src/serialize/frame.ts
   var serializeFrame = async (node) => {
-    const alignment = readAlignmentFrame(node);
-    const cornerRadius = await readCornerRadius(node);
-    const dimensions = await readDimensions(node);
-    const effect = await readEffect(node);
-    const fill = await readFill(node);
-    const gap = await readGap(node);
-    const layout = readLayout(node);
-    const padding = await readPadding(node);
-    const stroke = await readStroke(node);
-    const errors = [
-      ...layout.errors,
-      ...dimensions.errors,
-      ...alignment.errors,
-      ...gap.errors,
-      ...padding.errors,
-      ...cornerRadius.errors,
-      ...fill.errors,
-      ...stroke.errors,
-      ...effect.errors
-    ];
-    const warnings = [
-      ...layout.warnings,
-      ...dimensions.warnings,
-      ...alignment.warnings,
-      ...gap.warnings,
-      ...padding.warnings,
-      ...cornerRadius.warnings,
-      ...fill.warnings,
-      ...stroke.warnings,
-      ...effect.warnings
-    ];
-    return {
-      properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), alignment.properties), cornerRadius.properties), dimensions.properties), effect.properties), fill.properties), gap.properties), layout.properties), padding.properties), stroke.properties), {
+    const _a3 = combineReads([
+      readLayerSettings(node),
+      readLayout(node),
+      await readDimensions(node),
+      readAlignmentFrame(node),
+      await readGap(node),
+      await readPadding(node),
+      await readCornerRadius(node),
+      await readFill(node),
+      await readStroke(node),
+      await readEffect(node)
+    ]), { properties } = _a3, issues = __objRest(_a3, ["properties"]);
+    return __spreadValues({
+      properties: __spreadProps(__spreadValues(__spreadValues({}, readIdentity(node)), properties), {
         children: node.children
-      }),
-      errors,
-      warnings
-    };
+      })
+    }, issues);
   };
 
   // src/serialize/group.ts
-  var serializeGroup = (node) => {
-    return {
-      properties: __spreadProps(__spreadValues({}, readIdentity(node)), {
-        "autolayout-vertical": true,
-        "width-fill": true,
-        "height-fill": true,
-        "alignment-top-left": true,
-        children: node.children
-      }),
-      errors: [],
-      warnings: []
-    };
-  };
+  var serializeGroup = (node) => ({
+    properties: __spreadProps(__spreadValues({}, readIdentity(node)), {
+      "autolayout-vertical": true,
+      "width-fill": true,
+      "height-fill": true,
+      "alignment-top-left": true,
+      children: node.children
+    }),
+    errors: [],
+    warnings: [
+      {
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "LAYER",
+        problem: "unsupported",
+        value: "group",
+        explanation: "Rendered as a vertical Frame, so overlapping layers stack."
+      }
+    ]
+  });
 
   // src/read/typography.ts
   var readTypography = async (node) => {
@@ -1524,7 +1652,8 @@
             layer: truncateName(node.name),
             property: "TYPOGRAPHY",
             problem: "not bound",
-            value: node.fontSize === figma.mixed ? void 0 : formatValue(node.fontSize)
+            value: node.fontSize === figma.mixed ? void 0 : formatValue(node.fontSize),
+            explanation: "Text sizes are read from text-* text styles, so this one is left out."
           }
         ],
         warnings: []
@@ -1533,7 +1662,15 @@
     if (node.textStyleId === figma.mixed) {
       return {
         properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "TYPOGRAPHY", problem: "mixed" }],
+        errors: [
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "TYPOGRAPHY",
+            problem: "mixed",
+            explanation: "Parts of the text differ, so the text size is left out."
+          }
+        ],
         warnings: []
       };
     }
@@ -1556,24 +1693,45 @@
     }
     return { properties: { ["typography-".concat(size)]: true }, errors: [], warnings: [] };
   };
-
-  // src/serialize/text.ts
-  var serializeText = async (node) => {
-    const fill = await readFill(node);
-    const alignment = readAlignmentText(node);
-    const typography = await readTypography(node);
-    const errors = [...typography.errors, ...alignment.errors, ...fill.errors];
-    const characters = node.characters;
+  var readTextDecoration = (node) => {
+    if (node.textDecoration === "NONE") return { properties: {}, errors: [], warnings: [] };
+    if (node.textDecoration === "UNDERLINE") {
+      return { properties: { "typography-decoration-underline": true }, errors: [], warnings: [] };
+    }
     return {
-      properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), alignment.properties), fill.properties), typography.properties), {
-        characters
-      }),
-      errors,
-      warnings: [...typography.warnings, ...alignment.warnings, ...fill.warnings]
+      properties: {},
+      errors: [],
+      warnings: [
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "TEXT DECORATION",
+          problem: node.textDecoration === figma.mixed ? "mixed" : "unsupported",
+          value: node.textDecoration === figma.mixed ? void 0 : formatValue(node.textDecoration),
+          explanation: node.textDecoration === figma.mixed ? "Only a whole text layer can be underlined, so this is left out." : "Only underline is supported, so this is left out."
+        }
+      ]
     };
   };
 
+  // src/serialize/text.ts
+  var serializeText = async (node) => {
+    const _a3 = combineReads([
+      readLayerSettings(node),
+      await readTypography(node),
+      readAlignmentText(node),
+      readTextDecoration(node),
+      await readFill(node)
+    ]), { properties } = _a3, issues = __objRest(_a3, ["properties"]);
+    return __spreadValues({
+      properties: __spreadProps(__spreadValues(__spreadValues({}, readIdentity(node)), properties), {
+        characters: node.characters
+      })
+    }, issues);
+  };
+
   // src/serialize/unsupported.ts
+  var WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
   var EMPTY = { properties: {}, errors: [], warnings: [] };
   var serializeUnsupported = async (node) => {
     const layout = "layoutMode" in node ? readLayout(node) : EMPTY;
@@ -1585,26 +1743,38 @@
     const fill = "fills" in node ? await readFill(node) : EMPTY;
     const stroke = "strokes" in node ? await readStroke(node) : EMPTY;
     const effect = "effects" in node ? await readEffect(node) : EMPTY;
-    const reads = [layout, dimensions, alignment, gap, padding, cornerRadius, fill, stroke, effect];
-    return {
-      properties: __spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), Object.assign({}, ...reads.map((read) => read.properties))), node.type === "ELLIPSE" ? { "corner-radius-full": true } : {}),
-      errors: reads.flatMap((read) => read.errors),
+    const _a3 = combineReads([
+      readLayerSettings(node),
+      layout,
+      dimensions,
+      alignment,
+      gap,
+      padding,
+      cornerRadius,
+      fill,
+      stroke,
+      effect
+    ]), { properties } = _a3, issues = __objRest(_a3, ["properties"]);
+    return __spreadProps(__spreadValues({
+      properties: __spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), properties), node.type === "ELLIPSE" ? { "corner-radius-full": true } : {})
+    }, issues), {
       warnings: [
         {
           nodeId: node.id,
           layer: truncateName(node.name),
           property: "LAYER",
           problem: "unsupported",
-          value: formatValue(node.type)
+          value: formatValue(node.type),
+          explanation: WRAPPER_TYPES.has(node.type) ? "The wrapper is skipped; only the layers inside it are kept." : "Rendered as This, a placeholder tag the library doesn't have."
         },
-        ...reads.flatMap((read) => read.warnings)
+        ...issues.warnings
       ]
-    };
+    });
   };
 
   // src/serialize/vector.ts
-  var round = (n) => String(Math.round(n * 100) / 100);
-  var roundPath = (data) => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (n) => round(Number(n)));
+  var round = (value) => String(Math.round(value * 100) / 100);
+  var roundPath = (data) => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (number) => round(Number(number)));
   var serializeVector = async (node, box = node) => {
     const fill = await readFill(node);
     const errors = [...fill.errors];
@@ -1618,9 +1788,9 @@
       });
     }
     const bound = "boundVariables" in box ? box.boundVariables : void 0;
-    const width = (bound == null ? void 0 : bound.width) ? await resolveBoundUnitClass("width-", bound.width) : void 0;
-    const height = (bound == null ? void 0 : bound.height) ? await resolveBoundUnitClass("height-", bound.height) : void 0;
-    if (!(bound == null ? void 0 : bound.width)) {
+    const width = (bound == null ? void 0 : bound.width) !== void 0 ? await resolveBoundUnitClass("width-", bound.width) : void 0;
+    const height = (bound == null ? void 0 : bound.height) !== void 0 ? await resolveBoundUnitClass("height-", bound.height) : void 0;
+    if ((bound == null ? void 0 : bound.width) === void 0) {
       errors.push({
         nodeId: box.id,
         layer: truncateName(box.name),
@@ -1628,7 +1798,8 @@
         problem: "not bound",
         value: formatValue(box.width)
       });
-    } else if (width === void 0) {
+    }
+    if ((bound == null ? void 0 : bound.width) !== void 0 && width === void 0) {
       errors.push({
         nodeId: box.id,
         layer: truncateName(box.name),
@@ -1637,7 +1808,7 @@
         value: formatValue(box.width)
       });
     }
-    if (!(bound == null ? void 0 : bound.height)) {
+    if ((bound == null ? void 0 : bound.height) === void 0) {
       errors.push({
         nodeId: box.id,
         layer: truncateName(box.name),
@@ -1645,31 +1816,43 @@
         problem: "not bound",
         value: formatValue(box.height)
       });
-    } else if (height === void 0) {
+    }
+    if ((bound == null ? void 0 : bound.height) !== void 0 && height === void 0) {
       errors.push({
         nodeId: box.id,
         layer: truncateName(box.name),
         property: "HEIGHT",
         problem: "not a token",
         value: formatValue(box.height)
+      });
+    }
+    const warnings = [...readLayerSettings(box).warnings, ...fill.warnings];
+    if (node.strokes.some((paint) => paint.visible !== false)) {
+      warnings.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "STROKE",
+        problem: "unsupported",
+        value: "vector",
+        explanation: "Only the vector's fill is rendered, so its outline is lost."
       });
     }
     const minX = box === node ? 0 : box.x - node.x;
     const minY = box === node ? 0 : box.y - node.y;
     return {
       properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), fill.properties), width ? { [width]: true } : {}), height ? { [height]: true } : {}), {
-        path: geometry.map((g) => roundPath(g.data)).join(" "),
+        path: geometry.map((path) => roundPath(path.data)).join(" "),
         viewBox: [minX, minY, box.width, box.height].map(round).join(" "),
-        fillRule: geometry.some((g) => g.windingRule === "EVENODD") ? "evenodd" : void 0
+        fillRule: geometry.some((path) => path.windingRule === "EVENODD") ? "evenodd" : void 0
       }),
       errors,
-      warnings: fill.warnings
+      warnings,
+      notifications: fill.notifications
     };
   };
 
   // src/serialize/node.ts
   var shouldExcludeFromOutput = async (node, annotationCategories, getMainComponentCached) => {
-    if (!node.visible) return true;
     if (hasExcludeFromOutputAnnotation(node.annotations, annotationCategories)) return true;
     const definitionLayer = await getMainDefinitionLayerForNode(node, getMainComponentCached);
     return definitionLayer !== null && "annotations" in definitionLayer && hasExcludeFromOutputAnnotation(definitionLayer.annotations, annotationCategories);
@@ -1703,12 +1886,29 @@
     const mainComponentByInstanceId = /* @__PURE__ */ new Map();
     const getMainComponentCached = (instance) => {
       const existing = mainComponentByInstanceId.get(instance.id);
-      if (existing) return existing;
+      if (existing !== void 0) return existing;
       const main = instance.getMainComponentAsync();
       mainComponentByInstanceId.set(instance.id, main);
       return main;
     };
     const serializeTree = async (node) => {
+      var _a3;
+      if (!node.visible) {
+        return {
+          properties: { type: node.type, EXCLUDE_FROM_OUTPUT: true },
+          errors: [],
+          warnings: [],
+          notifications: [
+            {
+              nodeId: node.id,
+              layer: truncateName(node.name),
+              property: "LAYER",
+              problem: "hidden, skipped",
+              explanation: "Left out, along with everything inside it."
+            }
+          ]
+        };
+      }
       if (await shouldExcludeFromOutput(node, annotationCategories, getMainComponentCached)) {
         return {
           properties: {
@@ -1718,18 +1918,21 @@
           warnings: []
         };
       }
-      const r = await serializeLayer(node);
+      const result = await serializeLayer(node);
       if (!isInFrame(node)) {
-        r.warnings = [...r.errors.filter(isSizeError), ...r.warnings];
-        r.errors = r.errors.filter((error) => !isSizeError(error));
+        const sizeNotifications = result.errors.filter(isSizeError).map((error) => __spreadProps(__spreadValues({}, error), {
+          explanation: "A top-level layer has no parent to size against, so its ".concat(error.property.toLowerCase(), " is left out.")
+        }));
+        result.notifications = [...sizeNotifications, ...(_a3 = result.notifications) != null ? _a3 : []];
+        result.errors = result.errors.filter((error) => !isSizeError(error));
       }
       const children = "children" in node ? node.children : [];
-      if (r.properties.type !== "VECTOR" && children.length > 0) {
-        r.properties.children = await Promise.all(
+      if (result.properties.type !== "VECTOR" && children.length > 0) {
+        result.properties.children = await Promise.all(
           children.map((child) => serializeTree(child))
         );
       }
-      return r;
+      return result;
     };
     return serializeTree(root);
   };
@@ -1739,18 +1942,16 @@
   figma.currentPage.setRelaunchData({ run: "Generate Unison component code from a selected frame" });
   figma.showUI(__html__, { width: 480, height: 640, title: "Unison", themeColors: true });
   var showOutput = true;
-  var hint = (text, duration = 1500) => figma.ui.postMessage({ hint: { text, duration } });
+  var showHint = (text, duration = 1500) => figma.ui.postMessage({ hint: { text, duration } });
   var selectionHistory = [];
   var currentSelectionId = null;
   var restoringSelection = false;
   var focusNode = async (id) => {
     const node = await figma.getNodeByIdAsync(id);
-    if (node && "visible" in node) {
-      figma.currentPage.selection = [node];
-      figma.viewport.scrollAndZoomIntoView([node]);
-      return true;
-    }
-    return false;
+    if (node === null || !("visible" in node)) return false;
+    figma.currentPage.selection = [node];
+    figma.viewport.scrollAndZoomIntoView([node]);
+    return true;
   };
   var recordSelection = () => {
     var _a3, _b;
@@ -1761,66 +1962,62 @@
       return;
     }
     if (id === currentSelectionId) return;
-    if (currentSelectionId) {
-      selectionHistory.push(currentSelectionId);
-    }
+    if (currentSelectionId !== null) selectionHistory.push(currentSelectionId);
     currentSelectionId = id;
   };
   recordSelection();
-  figma.ui.onmessage = async (msg) => {
+  figma.ui.onmessage = async (message) => {
     var _a3, _b;
-    if (msg.type === "toggleOutput") {
-      showOutput = (_a3 = msg.showOutput) != null ? _a3 : true;
-      runner();
+    if (message.type === "toggleOutput") {
+      showOutput = (_a3 = message.showOutput) != null ? _a3 : true;
+      renderSelection();
       return;
     }
-    if (msg.type === "import") {
-      const messages = [];
+    if (message.type === "import") {
+      const notices = [];
       try {
-        messages.push(await importVariables(msg.tokens));
-        messages.push(await createShadowStyles());
-        messages.push(await createTextStyles());
-        figma.notify(messages.join(" "), { timeout: 6e3 });
-        hint("Imported design tokens", 3e3);
+        notices.push(await importVariables(message.tokens));
+        notices.push(await createShadowStyles());
+        notices.push(await createTextStyles());
+        figma.notify(notices.join(" "), { timeout: 6e3 });
+        showHint("Imported design tokens", 3e3);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        figma.notify("".concat(messages.join(" "), " Import failed: ").concat(reason).trim(), { error: true, timeout: 1e4 });
-        hint("Import failed", 3e3);
+        figma.notify("".concat(notices.join(" "), " Import failed: ").concat(reason).trim(), { error: true, timeout: 1e4 });
+        showHint("Import failed", 3e3);
       }
-      runner();
+      renderSelection();
       return;
     }
-    if (msg.type === "refresh") {
-      await runner();
-      hint("Regenerated component code");
+    if (message.type === "refresh") {
+      await renderSelection();
+      showHint("Regenerated component code");
       return;
     }
-    if (msg.type === "back") {
+    if (message.type === "back") {
       while (selectionHistory.length > 0) {
         const previousId = selectionHistory.pop();
-        if (!previousId) break;
+        if (previousId === void 0) break;
         restoringSelection = true;
         if (await focusNode(previousId)) {
           currentSelectionId = previousId;
-          hint("Selected previous layer");
+          showHint("Selected previous layer");
           return;
         }
         restoringSelection = false;
       }
-      runner();
-      hint("No previous layer");
+      renderSelection();
+      showHint("No previous layer");
       return;
     }
-    const id = msg.selectNode;
-    if (!id) return;
+    const id = message.selectNode;
+    if (id === void 0) return;
     const alreadySelected = ((_b = figma.currentPage.selection[0]) == null ? void 0 : _b.id) === id;
     await focusNode(id);
-    if (alreadySelected) {
-      runner();
-    }
+    if (alreadySelected) renderSelection();
   };
   var latestRun = 0;
-  var runner = async () => {
+  var renderSelection = async () => {
     const run = ++latestRun;
     figma.ui.postMessage({ loading: true });
     const node = figma.currentPage.selection[0];
@@ -1829,36 +2026,42 @@
       return;
     }
     try {
-      const warnings = [];
       const errors = [];
-      const json = await serializeNode(node);
-      const collectMessages = (p) => {
-        var _a3;
-        warnings.push(...p.warnings);
-        errors.push(...p.errors);
-        for (const child of (_a3 = p.properties.children) != null ? _a3 : []) {
-          collectMessages(child);
+      const warnings = [];
+      const notifications = [];
+      const tree = await serializeNode(node);
+      const collectIssues = (result) => {
+        var _a3, _b;
+        const withLayerType = (issue) => __spreadProps(__spreadValues({}, issue), { layerType: String(result.properties.type) });
+        errors.push(...result.errors.map(withLayerType));
+        warnings.push(...result.warnings.map(withLayerType));
+        notifications.push(...((_a3 = result.notifications) != null ? _a3 : []).map(withLayerType));
+        for (const child of (_b = result.properties.children) != null ? _b : []) {
+          collectIssues(child);
         }
       };
-      collectMessages(json);
-      const output = showOutput ? renderComponentCode(json) : "";
+      collectIssues(tree);
+      const output = showOutput ? renderComponentCode(tree) : "";
       if (run !== latestRun) return;
-      figma.ui.postMessage({ output, warnings, errors });
+      figma.ui.postMessage({ output, errors, warnings, notifications });
     } catch (error) {
       if (run !== latestRun) return;
       const reason = error instanceof Error ? error.message : String(error);
       figma.ui.postMessage({
         output: "",
         warnings: [],
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "CODE", problem: reason }]
+        notifications: [],
+        errors: [
+          { nodeId: node.id, layer: truncateName(node.name), property: "CODE", problem: reason, layerType: node.type }
+        ]
       });
     }
   };
   figma.on("selectionchange", () => {
     recordSelection();
-    runner();
+    renderSelection();
   });
   figma.loadAllPagesAsync().then(() => {
-    figma.on("documentchange", runner);
+    figma.on("documentchange", renderSelection);
   });
 })();

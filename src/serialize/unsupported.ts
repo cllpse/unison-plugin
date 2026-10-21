@@ -5,20 +5,24 @@ import { readEffect } from "../read/effect"
 import { readFill } from "../read/fill"
 import { readGap } from "../read/gap"
 import { readIdentity } from "../read/identity"
+import { readLayerSettings } from "../read/layer"
 import { readLayout } from "../read/layout"
 import { readPadding } from "../read/padding"
 import { readStroke } from "../read/stroke"
-import type { PropertiesErrorOrWarning } from "../types"
-import { formatValue, truncateName } from "../utilities"
+import type { PropertiesAndIssues } from "../types"
+import { combineReads, formatValue, truncateName } from "../utilities"
 
-const EMPTY: PropertiesErrorOrWarning = { properties: {}, errors: [], warnings: [] }
+/** Layers that render only their children (see `SKIP_WRAPPER_TYPES` in utilities). */
+const WRAPPER_TYPES = new Set(["INSTANCE", "COMPONENT", "SLOT"])
+
+const EMPTY: PropertiesAndIssues = { properties: {}, errors: [], warnings: [] }
 
 /**
  * Any layer the library has no component for (rectangle, ellipse, line, star, polygon, boolean operation, slice,
  * section, component, instance, ...). It is reported as unsupported and rendered as `This` with whatever settings it
  * has, so its size, fill, stroke and corners survive; component and instance wrappers render only their children.
  */
-export const serializeUnsupported = async (node: SceneNode): Promise<PropertiesErrorOrWarning> => {
+export const serializeUnsupported = async (node: SceneNode): Promise<PropertiesAndIssues> => {
   // Components, instances and other frame-like layers need auto layout too; other layers have none to report.
   const layout = "layoutMode" in node ? readLayout(node) : EMPTY
   const dimensions = "layoutSizingHorizontal" in node ? await readDimensions(node) : EMPTY
@@ -32,18 +36,29 @@ export const serializeUnsupported = async (node: SceneNode): Promise<PropertiesE
   const effect = "effects" in node ? await readEffect(node) : EMPTY
 
   // In the order of Figma's right panel, like the rendered flags.
-  const reads = [layout, dimensions, alignment, gap, padding, cornerRadius, fill, stroke, effect]
+  const { properties, ...issues } = combineReads([
+    readLayerSettings(node),
+    layout,
+    dimensions,
+    alignment,
+    gap,
+    padding,
+    cornerRadius,
+    fill,
+    stroke,
+    effect,
+  ])
 
   return {
     properties: {
       ...readIdentity(node),
 
-      ...Object.assign({}, ...reads.map((read) => read.properties)),
+      ...properties,
 
       ...(node.type === "ELLIPSE" ? { "corner-radius-full": true } : {}),
     },
 
-    errors: reads.flatMap((read) => read.errors),
+    ...issues,
     warnings: [
       {
         nodeId: node.id,
@@ -51,8 +66,11 @@ export const serializeUnsupported = async (node: SceneNode): Promise<PropertiesE
         property: "LAYER",
         problem: "unsupported",
         value: formatValue(node.type),
+        explanation: WRAPPER_TYPES.has(node.type)
+          ? "The wrapper is skipped; only the layers inside it are kept."
+          : "Rendered as This, a placeholder tag the library doesn't have.",
       },
-      ...reads.flatMap((read) => read.warnings),
+      ...issues.warnings,
     ],
   }
 }

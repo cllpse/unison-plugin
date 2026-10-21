@@ -1,4 +1,4 @@
-import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import type { Issue, Properties, PropertiesAndIssues } from "../types"
 import { formatValue, truncateName } from "../utilities"
 import { resolveBoundUnitClass } from "./unit"
 
@@ -8,7 +8,7 @@ const readSpacing = async (
   label: string,
   value: number,
   bound: VariableAlias | undefined,
-  errors: ErrorOrWarning[],
+  errors: Issue[],
 ): Promise<string | undefined> => {
   if (bound === undefined) {
     errors.push({
@@ -39,9 +39,9 @@ const readSpacing = async (
 
 // Without wrap, Figma has one gap, between items: `gap-`. With wrap on it has two, between items in a row and between
 // rows: `gap-` when they're equal, else `gap-horizontal-` and `gap-vertical-`. The rows' Auto setting has no flag.
-export const readGap = async (node: SceneNode & AutoLayoutMixin): Promise<PropertiesErrorOrWarning> => {
+export const readGap = async (node: SceneNode & AutoLayoutMixin): Promise<PropertiesAndIssues> => {
   const properties: Properties = {}
-  const errors: ErrorOrWarning[] = []
+  const errors: Issue[] = []
 
   const items =
     node.itemSpacing > 0

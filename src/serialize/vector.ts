@@ -1,24 +1,25 @@
 import { readFill } from "../read/fill"
 import { readIdentity } from "../read/identity"
+import { readLayerSettings } from "../read/layer"
 import { resolveBoundUnitClass } from "../read/unit"
-import type { ErrorOrWarning, PropertiesErrorOrWarning } from "../types"
+import type { Issue, PropertiesAndIssues } from "../types"
 import { formatValue, truncateName } from "../utilities"
 
 // Figma emits path data with up to 4 decimals per coordinate; 2 keeps icons crisp at any size while keeping the
 // generated JSX short.
-const round = (n: number): string => String(Math.round(n * 100) / 100)
+const round = (value: number): string => String(Math.round(value * 100) / 100)
 
-const roundPath = (data: string): string => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (n) => round(Number(n)))
+const roundPath = (data: string): string => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (number) => round(Number(number)))
 
 /**
  * Serialize a vector to its fill geometry. `box` is the layer the vector sits in when an icon wraps it in a
  * padded bounding box (Material Symbols, Material Design icons); the viewBox then spans that box so the padding
  * survives, instead of cropping to the glyph.
  */
-export const serializeVector = async (node: VectorNode, box: SceneNode = node): Promise<PropertiesErrorOrWarning> => {
+export const serializeVector = async (node: VectorNode, box: SceneNode = node): Promise<PropertiesAndIssues> => {
   const fill = await readFill(node)
 
-  const errors: ErrorOrWarning[] = [...fill.errors]
+  const errors: Issue[] = [...fill.errors]
 
   // `fillGeometry` is the filled outline (strokes excluded); fall back to the raw vector network for unfilled vectors.
   const geometry = node.fillGeometry.length > 0 ? node.fillGeometry : node.vectorPaths
@@ -35,10 +36,10 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
   // A vector renders in a fixed `width-` / `height-` box; like a fixed Frame, both sides must be bound to a unit
   // design token.
   const bound = "boundVariables" in box ? box.boundVariables : undefined
-  const width = bound?.width ? await resolveBoundUnitClass("width-", bound.width) : undefined
-  const height = bound?.height ? await resolveBoundUnitClass("height-", bound.height) : undefined
+  const width = bound?.width !== undefined ? await resolveBoundUnitClass("width-", bound.width) : undefined
+  const height = bound?.height !== undefined ? await resolveBoundUnitClass("height-", bound.height) : undefined
 
-  if (!bound?.width) {
+  if (bound?.width === undefined) {
     errors.push({
       nodeId: box.id,
       layer: truncateName(box.name),
@@ -46,7 +47,9 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
       problem: "not bound",
       value: formatValue(box.width),
     })
-  } else if (width === undefined) {
+  }
+
+  if (bound?.width !== undefined && width === undefined) {
     errors.push({
       nodeId: box.id,
       layer: truncateName(box.name),
@@ -56,7 +59,7 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
     })
   }
 
-  if (!bound?.height) {
+  if (bound?.height === undefined) {
     errors.push({
       nodeId: box.id,
       layer: truncateName(box.name),
@@ -64,13 +67,29 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
       problem: "not bound",
       value: formatValue(box.height),
     })
-  } else if (height === undefined) {
+  }
+
+  if (bound?.height !== undefined && height === undefined) {
     errors.push({
       nodeId: box.id,
       layer: truncateName(box.name),
       property: "HEIGHT",
       problem: "not a token",
       value: formatValue(box.height),
+    })
+  }
+
+  const warnings: Issue[] = [...readLayerSettings(box).warnings, ...fill.warnings]
+
+  // Only the fill geometry is rendered, so a stroked icon loses its outline.
+  if (node.strokes.some((paint) => paint.visible !== false)) {
+    warnings.push({
+      nodeId: node.id,
+      layer: truncateName(node.name),
+      property: "STROKE",
+      problem: "unsupported",
+      value: "vector",
+      explanation: "Only the vector's fill is rendered, so its outline is lost.",
     })
   }
 
@@ -88,12 +107,13 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
       ...(width ? { [width]: true } : {}),
       ...(height ? { [height]: true } : {}),
 
-      path: geometry.map((g) => roundPath(g.data)).join(" "),
+      path: geometry.map((path) => roundPath(path.data)).join(" "),
       viewBox: [minX, minY, box.width, box.height].map(round).join(" "),
-      fillRule: geometry.some((g) => g.windingRule === "EVENODD") ? "evenodd" : undefined,
+      fillRule: geometry.some((path) => path.windingRule === "EVENODD") ? "evenodd" : undefined,
     },
 
     errors,
-    warnings: fill.warnings,
+    warnings,
+    notifications: fill.notifications,
   }
 }

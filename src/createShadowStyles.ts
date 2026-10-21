@@ -16,7 +16,7 @@ type Layer = Partial<Record<keyof typeof FIELDS, Variable>>
 
 // The variables have a single mode, so the first value is the value.
 const modeValue = (variable: Variable | undefined): VariableValue | undefined =>
-  variable ? Object.values(variable.valuesByMode)[0] : undefined
+  variable === undefined ? undefined : Object.values(variable.valuesByMode)[0]
 
 const numberOf = (variable: Variable | undefined): number => {
   const value = modeValue(variable)
@@ -27,9 +27,7 @@ const numberOf = (variable: Variable | undefined): number => {
 const colorOf = (variable: Variable | undefined): RGBA => {
   const value = modeValue(variable)
 
-  if (value && typeof value === "object" && "r" in value) {
-    return { a: 1, ...value }
-  }
+  if (value && typeof value === "object" && "r" in value) return { a: 1, ...value }
 
   return { r: 0, g: 0, b: 0, a: 0.1 }
 }
@@ -46,18 +44,16 @@ const buildEffect = (layer: Layer): Effect => {
   }
 
   for (const [field, variable] of Object.entries(layer)) {
-    if (variable) {
-      effect = figma.variables.setBoundVariableForEffect(effect, FIELDS[field as keyof typeof FIELDS], variable)
-    }
+    if (variable === undefined) continue
+
+    effect = figma.variables.setBoundVariableForEffect(effect, FIELDS[field as keyof typeof FIELDS], variable)
   }
 
   return effect
 }
 
 export const createShadowStyles = async (): Promise<string> => {
-  if (figma.editorType !== "figma") {
-    return "Shadow styles need the Figma editor."
-  }
+  if (figma.editorType !== "figma") return "Shadow styles need the Figma editor."
 
   const shadows = new Map<string, Map<number, Layer>>()
 
@@ -75,9 +71,7 @@ export const createShadowStyles = async (): Promise<string> => {
     shadows.set(name, layers)
   }
 
-  if (shadows.size === 0) {
-    return "No shadow variables found."
-  }
+  if (shadows.size === 0) return "No shadow variables found."
 
   const styles = await figma.getLocalEffectStylesAsync()
   let created = 0
@@ -92,17 +86,16 @@ export const createShadowStyles = async (): Promise<string> => {
 
     style.name = `shadow-${name}`
 
-    style.effects = [...layers.entries()].sort(([a], [b]) => a - b).map(([, layer]) => buildEffect(layer))
+    style.effects = [...layers.entries()]
+      .sort(([indexA], [indexB]) => indexA - indexB)
+      .map(([, layer]) => buildEffect(layer))
 
     if (previous) figma.moveLocalEffectStyleAfter(style, previous)
 
     previous = style
 
-    if (existing) {
-      updated++
-    } else {
-      created++
-    }
+    if (existing) updated++
+    if (existing === undefined) created++
   }
 
   return `Shadow styles: ${created} created, ${updated} updated.`

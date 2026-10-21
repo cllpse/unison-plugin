@@ -1,33 +1,37 @@
-/** Dev Mode annotation category / note used to drop a layer from exported output. */
+/** The Dev Mode annotation label or category that drops a layer from the output. */
 const EXCLUDE_MARK = "EXCLUDE_FROM_OUTPUT"
 
-const normalizeExcludeToken = (s: string | undefined): string => (s ?? "").trim().toUpperCase()
+export type AnnotationCategories = Awaited<ReturnType<typeof figma.annotations.getAnnotationCategoriesAsync>>
 
-const annotationMatchesExcludeFromOutput = (
-  a: Annotation,
-  annotationCategories: Awaited<ReturnType<typeof figma.annotations.getAnnotationCategoriesAsync>> | undefined,
+const normalizeExcludeToken = (text: string | undefined): string => (text ?? "").trim().toUpperCase()
+
+const matchesExcludeFromOutput = (
+  annotation: Annotation,
+  annotationCategories: AnnotationCategories | undefined,
 ): boolean => {
-  if (normalizeExcludeToken(a.label) === EXCLUDE_MARK) return true
-  if (a.labelMarkdown && normalizeExcludeToken(a.labelMarkdown.replace(/<[^>]+>/g, " ")) === EXCLUDE_MARK) return true
-  if (a.categoryId === undefined) return false
+  const markdownLabel = annotation.labelMarkdown?.replace(/<[^>]+>/g, " ")
+
+  if (normalizeExcludeToken(annotation.label) === EXCLUDE_MARK) return true
+  if (markdownLabel && normalizeExcludeToken(markdownLabel) === EXCLUDE_MARK) return true
+  if (annotation.categoryId === undefined) return false
 
   return (annotationCategories ?? []).some(
-    (c) => c.id === a.categoryId && normalizeExcludeToken(c.label) === EXCLUDE_MARK,
+    (category) => category.id === annotation.categoryId && normalizeExcludeToken(category.label) === EXCLUDE_MARK,
   )
 }
 
 export const hasExcludeFromOutputAnnotation = (
   annotations: ReadonlyArray<Annotation> | undefined,
-  annotationCategories: Awaited<ReturnType<typeof figma.annotations.getAnnotationCategoriesAsync>> | undefined,
-): boolean => (annotations ?? []).some((a) => annotationMatchesExcludeFromOutput(a, annotationCategories))
+  annotationCategories: AnnotationCategories | undefined,
+): boolean => (annotations ?? []).some((annotation) => matchesExcludeFromOutput(annotation, annotationCategories))
 
 const findNearestInstanceAncestor = (node: SceneNode): InstanceNode | null => {
-  let walk: BaseNode | null = node
+  let current: BaseNode | null = node
 
-  while (walk) {
-    if (walk.type === "INSTANCE") return walk
+  while (current !== null) {
+    if (current.type === "INSTANCE") return current
 
-    walk = walk.parent
+    current = current.parent
   }
 
   return null
@@ -73,14 +77,14 @@ export const getMainDefinitionLayerForNode = async (
 
   let definition: SceneNode = main
 
-  for (const i of path) {
+  for (const index of path) {
     if (!("children" in definition)) return null
 
     const nextChildren: ReadonlyArray<SceneNode> = definition.children
 
-    if (i >= nextChildren.length) return null
+    if (index >= nextChildren.length) return null
 
-    definition = nextChildren[i] as SceneNode
+    definition = nextChildren[index] as SceneNode
   }
 
   return definition

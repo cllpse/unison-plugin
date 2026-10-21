@@ -1,5 +1,5 @@
 import { HEIGHT_SIZING, WIDTH_SIZING } from "../maps"
-import type { ErrorOrWarning, Properties, PropertiesErrorOrWarning } from "../types"
+import type { Issue, Properties, PropertiesAndIssues } from "../types"
 import { formatValue, truncateName } from "../utilities"
 import { resolveBoundUnitClass, resolveBoundWidthClass } from "./unit"
 
@@ -12,7 +12,7 @@ const readSize = async (
   bound: VariableAlias | undefined,
   resolveFixedClass: (bound: VariableAlias) => Promise<string | undefined>,
   sizingFlags: Record<string, string>,
-  errors: ErrorOrWarning[],
+  errors: Issue[],
 ): Promise<string | undefined> => {
   if (sizing === "FIXED" && bound) {
     const className = await resolveFixedClass(bound)
@@ -57,9 +57,9 @@ const readSize = async (
   return sizingFlags[sizing]
 }
 
-export const readDimensions = async (node: SceneNode & LayoutMixin): Promise<PropertiesErrorOrWarning> => {
+export const readDimensions = async (node: SceneNode & LayoutMixin): Promise<PropertiesAndIssues> => {
   const properties: Properties = {}
-  const errors: ErrorOrWarning[] = []
+  const errors: Issue[] = []
 
   const width = await readSize(
     node,
