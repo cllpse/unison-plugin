@@ -1,4 +1,4 @@
-<img width="1920" height="1080" alt="Product" src="https://github.com/user-attachments/assets/410815d5-0f55-4c12-a76f-cbd567628af7" />
+<img width="300" height="491" alt="unison-plugin" src="https://github.com/user-attachments/assets/e9bc71ad-fa61-4d7f-92fe-572516040496" />
 
 # unison-plugin
 
