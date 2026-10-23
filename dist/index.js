@@ -923,7 +923,7 @@
     ["transition-duration", "duration", TRANSITION_DURATIONS],
     ["transition-delay", "delay", TRANSITION_DELAYS],
     ["transition-easing", "ease", EASINGS],
-    ["tailwind-animate", "motion-safe:animate", ANIMATIONS]
+    ["animate", "motion-safe:animate", ANIMATIONS]
   ];
   var SIZE_MODES = ["fill", "hug"];
   var NAMED_FLAGS = {
@@ -943,6 +943,7 @@
     "stroke-style": ["stroke-style-dashed", "stroke-style-solid"],
     "typography-align": ["typography-align-left", "typography-align-center", "typography-align-right"],
     "typography-decoration": ["typography-decoration-underline"],
+    "typography-settings": ["typography-settings-truncate"],
     "pointer-events": ["pointer-events-none", "pointer-events-auto"],
     tailwind: ["tailwind-group", "tailwind-group-hover-fill"]
   };
