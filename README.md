@@ -12,9 +12,15 @@ Part of [Unison](https://github.com/cllpse/unison), alongside
 [unison-playground-expo](https://github.com/cllpse/unison-playground-expo) and
 [unison-website](https://github.com/cllpse/unison-website).
 
-## Install from the manifest
+## Install
 
-The plugin is in review for the Figma Community. Until it's listed there, install it from this repository's manifest.
+Install the plugin from the [Figma Community](https://www.figma.com/community/plugin/1691815551141309696).
+
+Figma is still reviewing the plugin, so its Community page may not be live yet. In the meantime, you can
+[install it from its manifest](#install-from-the-manifest) in the Figma desktop app.
+
+### Install from the manifest
+
 Figma only imports plugins from a manifest in its desktop app, not in the browser.
 
 1. Get the repository: clone it with `git clone https://github.com/cllpse/unison-plugin`, or download it as a ZIP from
