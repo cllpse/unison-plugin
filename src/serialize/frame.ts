@@ -12,7 +12,7 @@ import { readStroke } from "../read/stroke"
 import type { PropertiesAndIssues } from "../types"
 import { combineReads } from "../utilities"
 
-export const serializeFrame = async (node: FrameNode | ComponentNode): Promise<PropertiesAndIssues> => {
+export const serializeFrame = async (node: FrameNode | ComponentNode | InstanceNode): Promise<PropertiesAndIssues> => {
   // In the order of Figma's right panel, like the rendered flags.
   const { properties, ...issues } = combineReads([
     readLayerSettings(node),

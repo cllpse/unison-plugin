@@ -11,10 +11,17 @@ const round = (value: number): string => String(Math.round(value * 100) / 100)
 
 const roundPath = (data: string): string => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (number) => round(Number(number)))
 
+/** A vector size in pixels: `spacing-full` stands for 100%, which a vector's box can't take. */
+const resolvePixelClass = async (prefix: string, alias: VariableAlias): Promise<string | undefined> => {
+  const className = await resolveBoundUnitClass(prefix, alias)
+
+  return className === `${prefix}full` ? undefined : className
+}
+
 /**
  * Serialize a vector to its fill geometry. `box` is the layer the vector sits in when an icon wraps it in a
- * padded bounding box (Material Symbols, Material Design icons); the viewBox then spans that box so the padding
- * survives, instead of cropping to the glyph.
+ * padded bounding box (Material Symbols, Material Design icons, an icon component); the viewBox then spans that box so
+ * the padding survives, instead of cropping to the glyph.
  */
 export const serializeVector = async (node: VectorNode, box: SceneNode = node): Promise<PropertiesAndIssues> => {
   const fill = await readFill(node)
@@ -36,8 +43,8 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
   // A vector renders in a fixed `width-` / `height-` box; like a fixed Frame, both sides must be bound to a unit
   // design token.
   const bound = "boundVariables" in box ? box.boundVariables : undefined
-  const width = bound?.width !== undefined ? await resolveBoundUnitClass("width-", bound.width) : undefined
-  const height = bound?.height !== undefined ? await resolveBoundUnitClass("height-", bound.height) : undefined
+  const width = bound?.width !== undefined ? await resolvePixelClass("width-", bound.width) : undefined
+  const height = bound?.height !== undefined ? await resolvePixelClass("height-", bound.height) : undefined
 
   if (bound?.width === undefined) {
     errors.push({
@@ -93,10 +100,10 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
     })
   }
 
-  // Path data is in the vector's own coordinates, so the box's origin is the vector's offset from it, negated. Both
-  // positions are relative to the same parent, since groups do not introduce a coordinate space.
-  const minX = box === node ? 0 : box.x - node.x
-  const minY = box === node ? 0 : box.y - node.y
+  // Path data is in the vector's own coordinates, so the box's origin is the vector's offset from it, negated. The
+  // offset is taken from the absolute positions, since an icon instance has its own coordinate space and a group not.
+  const minX = box === node ? 0 : box.absoluteTransform[0][2] - node.absoluteTransform[0][2]
+  const minY = box === node ? 0 : box.absoluteTransform[1][2] - node.absoluteTransform[1][2]
 
   return {
     properties: {

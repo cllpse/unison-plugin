@@ -13,14 +13,14 @@ import type { PropertiesAndIssues } from "../types"
 import { combineReads, formatValue, truncateName } from "../utilities"
 
 /** Layers that render only their children (see `SKIP_WRAPPER_TYPES` in utilities). */
-const WRAPPER_TYPES = new Set(["INSTANCE", "COMPONENT", "SLOT"])
+const WRAPPER_TYPES = new Set(["SLOT"])
 
 const EMPTY: PropertiesAndIssues = { properties: {}, errors: [], warnings: [] }
 
 /**
  * Any layer the library has no component for (rectangle, ellipse, line, star, polygon, boolean operation, slice,
- * section, component, instance, ...). It is reported as unsupported and rendered as `This` with whatever settings it
- * has, so its size, fill, stroke and corners survive; component and instance wrappers render only their children.
+ * section, component set, ...). It is reported as unsupported and rendered as `This` with whatever settings it has, so
+ * its size, fill, stroke and corners survive; slot wrappers render only their children.
  */
 export const serializeUnsupported = async (node: SceneNode): Promise<PropertiesAndIssues> => {
   // Components, instances and other frame-like layers need auto layout too; other layers have none to report.

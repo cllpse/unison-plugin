@@ -25,8 +25,9 @@ const STRING_PROP_KEYS: Record<string, string[]> = {
 
 /**
  * Flag prefixes in the order their settings appear in Figma's right panel: layout (direction, size, alignment, gap,
- * padding), appearance (corner radius), typography, fill, stroke, effects. A flag ranks by its longest matching prefix;
- * flags of the same rank sort alphabetically, and unknown flags go last.
+ * padding), appearance (corner radius), typography, fill, stroke (each with its own and its group's hover), effects,
+ * then the `group` a hover makes. A flag ranks by its longest matching prefix; flags of the same rank sort
+ * alphabetically, and unknown flags go last.
  */
 const PANEL_ORDER = [
   "autolayout-",
@@ -55,10 +56,13 @@ const PANEL_ORDER = [
   "typography-settings-",
   "fill-",
   "fill-hover-",
+  "group-hover-fill-",
   "stroke-",
   "stroke-style-",
   "stroke-hover-",
+  "group-hover-stroke-",
   "effect-",
+  "group",
 ]
 
 const getPanelRank = (flag: string): number => {
@@ -77,7 +81,7 @@ const getPanelRank = (flag: string): number => {
 
 const compareByPanelOrder = (a: string, b: string): number => getPanelRank(a) - getPanelRank(b) || a.localeCompare(b)
 
-const SKIP_WRAPPER_TYPES = new Set(["INSTANCE", "COMPONENT", "SLOT"])
+const SKIP_WRAPPER_TYPES = new Set(["SLOT"])
 
 /** The boolean flags of a node, rendered one per line in its opening tag. */
 const getFlagKeys = (properties: Record<string, unknown>): string[] =>
@@ -106,11 +110,13 @@ const formatOpenTag = (
   return lines.join("\n")
 }
 
+const FRAME_TYPES = new Set(["FRAME", "GROUP", "COMPONENT", "INSTANCE"])
+
 /** An unsupported layer renders as `This`, a tag the library doesn't have, so it stands out as something to replace. */
 const resolveTag = (properties: Record<string, unknown>): string => {
   if (properties.type === "TEXT") return "Text"
   if (properties.type === "VECTOR") return "Vector"
-  if (properties.type === "FRAME" || properties.type === "GROUP") return "Frame"
+  if (FRAME_TYPES.has(String(properties.type))) return "Frame"
 
   return "This"
 }
