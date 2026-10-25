@@ -68,14 +68,14 @@
     return effect;
   };
   var createShadowStyles = async () => {
-    var _a3, _b;
+    var _a4, _b;
     if (figma.editorType !== "figma") return "Shadow styles need the Figma editor.";
     const shadows = /* @__PURE__ */ new Map();
     for (const variable of await figma.variables.getLocalVariablesAsync()) {
       const match = variable.name.match(SHADOW_VARIABLE);
       if (!match) continue;
       const [, name, index, field] = match;
-      const layers = (_a3 = shadows.get(name)) != null ? _a3 : /* @__PURE__ */ new Map();
+      const layers = (_a4 = shadows.get(name)) != null ? _a4 : /* @__PURE__ */ new Map();
       const layer = (_b = layers.get(Number(index))) != null ? _b : {};
       layer[field] = variable;
       layers.set(Number(index), layer);
@@ -103,14 +103,14 @@
   var TYPOGRAPHY_VARIABLE = /^(font-size|line-height)-(.+)$/;
   var DEFAULT_FONT = { family: "Inter", style: "Regular" };
   var createTextStyles = async () => {
-    var _a3, _b;
+    var _a4, _b;
     if (figma.editorType !== "figma") return "Text styles need the Figma editor.";
     const sizes = /* @__PURE__ */ new Map();
     for (const variable of await figma.variables.getLocalVariablesAsync("FLOAT")) {
       const match = variable.name.match(TYPOGRAPHY_VARIABLE);
       if (!match) continue;
       const [, field, name] = match;
-      const size = (_a3 = sizes.get(name)) != null ? _a3 : {};
+      const size = (_a4 = sizes.get(name)) != null ? _a4 : {};
       size[field] = variable;
       sizes.set(name, size);
     }
@@ -192,7 +192,7 @@
     return typeof name === "string" ? name : "Default";
   };
   var importVariables = async (text) => {
-    var _a3, _b, _c, _d;
+    var _a4, _b, _c, _d;
     if (figma.editorType !== "figma") return "Variables need the Figma editor.";
     let file;
     try {
@@ -213,7 +213,7 @@
     let created = 0;
     let updated = 0;
     for (const { name, modes } of collectionsInFile) {
-      const collection = (_a3 = collections.find((existing) => existing.name === name)) != null ? _a3 : figma.variables.createVariableCollection(name);
+      const collection = (_a4 = collections.find((existing) => existing.name === name)) != null ? _a4 : figma.variables.createVariableCollection(name);
       const modeIds = modes.map((mode, index) => {
         const existing = collection.modes.find((collectionMode) => collectionMode.name === modeName(mode));
         if (existing !== void 0) return existing.modeId;
@@ -244,234 +244,6 @@
       }
     }
     return "Variables: ".concat(created, " created, ").concat(updated, " updated.");
-  };
-
-  // src/utilities.ts
-  var formatHexByte = (value) => {
-    const clamped = Math.max(0, Math.min(255, Math.round(value)));
-    const hex = clamped.toString(16).toUpperCase();
-    return hex.length === 1 ? "0".concat(hex) : hex;
-  };
-  var convertRgbToHex = (rgb) => "#".concat(formatHexByte(rgb.r * 255)).concat(formatHexByte(rgb.g * 255)).concat(formatHexByte(rgb.b * 255));
-  var INDENT = " ".repeat(4);
-  var META_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "children", "characters"]);
-  var STRING_PROP_KEYS = {
-    Vector: ["path", "viewBox", "fillRule"]
-  };
-  var PANEL_ORDER = [
-    "autolayout-",
-    "wrap",
-    "width-",
-    "height-",
-    "alignment-",
-    "gap-",
-    "gap-horizontal-",
-    "gap-vertical-",
-    "padding-",
-    "padding-horizontal-",
-    "padding-vertical-",
-    "padding-left-",
-    "padding-top-",
-    "padding-right-",
-    "padding-bottom-",
-    "corner-radius-",
-    "corner-radius-top-left-",
-    "corner-radius-top-right-",
-    "corner-radius-bottom-right-",
-    "corner-radius-bottom-left-",
-    "typography-",
-    "typography-align-",
-    "typography-decoration-",
-    "fill-",
-    "fill-hover-",
-    "stroke-",
-    "stroke-style-",
-    "stroke-hover-",
-    "effect-"
-  ];
-  var getPanelRank = (flag) => {
-    let rank = PANEL_ORDER.length;
-    let length = 0;
-    for (const [index, prefix] of PANEL_ORDER.entries()) {
-      if (flag.startsWith(prefix) && prefix.length > length) {
-        rank = index;
-        length = prefix.length;
-      }
-    }
-    return rank;
-  };
-  var compareByPanelOrder = (a, b) => getPanelRank(a) - getPanelRank(b) || a.localeCompare(b);
-  var SKIP_WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
-  var getFlagKeys = (properties) => Object.keys(properties).filter((key) => !META_KEYS.has(key) && properties[key] === true);
-  var formatOpenTag = (tag, properties, indentation, selfClosing) => {
-    var _a3;
-    const flags = getFlagKeys(properties).sort(compareByPanelOrder);
-    const attributes = ((_a3 = STRING_PROP_KEYS[tag]) != null ? _a3 : []).filter((key) => typeof properties[key] === "string").map((key) => "".concat(key, '="').concat(properties[key], '"'));
-    const keys = [...flags, ...attributes];
-    if (keys.length === 0) return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
-    const lines = [
-      "".concat(indentation, "<").concat(tag),
-      ...keys.map((key) => "".concat(indentation, "  ").concat(key)),
-      selfClosing ? "".concat(indentation, "/>") : "".concat(indentation, ">")
-    ];
-    return lines.join("\n");
-  };
-  var resolveTag = (properties) => {
-    if (properties.type === "TEXT") return "Text";
-    if (properties.type === "VECTOR") return "Vector";
-    if (properties.type === "FRAME" || properties.type === "GROUP") return "Frame";
-    return "This";
-  };
-  var renderChildren = (children, indentation) => children.map((child) => renderNode(child, indentation)).filter((part) => part.length > 0).join("\n");
-  var renderNode = (node, indentation) => {
-    var _a3;
-    const { properties } = node;
-    if (properties.EXCLUDE_FROM_OUTPUT === true) return "";
-    const tag = resolveTag(properties);
-    const children = (_a3 = properties.children) != null ? _a3 : [];
-    const type = properties.type;
-    if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation);
-    if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation);
-    const selfClosing = tag === "Vector" || tag === "This" && children.length === 0;
-    const open = formatOpenTag(tag, properties, indentation, selfClosing);
-    if (selfClosing) return open;
-    if (tag === "Text")
-      return [open, "".concat(indentation).concat(INDENT).concat(properties.characters), "".concat(indentation, "</Text>")].join("\n");
-    const inner = renderChildren(children, "".concat(indentation).concat(INDENT));
-    return [open, ...inner.length > 0 ? [inner] : [], "".concat(indentation, "</").concat(tag, ">")].join("\n");
-  };
-  var renderComponentCode = (tree) => renderNode(tree, "");
-  var formatValue = (value, unit = "px") => typeof value === "number" ? "".concat(Math.round(value * 100) / 100).concat(unit) : value.toLowerCase().replace(/_/g, " ");
-  var MAX_NAME_LENGTH = 15;
-  var truncateName = (name) => name.length > MAX_NAME_LENGTH ? "".concat(name.slice(0, MAX_NAME_LENGTH), "\u2026") : name;
-  var combineReads = (reads) => ({
-    properties: Object.assign({}, ...reads.map((read) => read.properties)),
-    errors: reads.flatMap((read) => read.errors),
-    warnings: reads.flatMap((read) => read.warnings),
-    notifications: reads.flatMap((read) => {
-      var _a3;
-      return (_a3 = read.notifications) != null ? _a3 : [];
-    })
-  });
-
-  // src/serialize/annotationExclude.ts
-  var EXCLUDE_MARK = "EXCLUDE_FROM_OUTPUT";
-  var normalizeExcludeToken = (text) => (text != null ? text : "").trim().toUpperCase();
-  var matchesExcludeFromOutput = (annotation, annotationCategories) => {
-    var _a3;
-    const markdownLabel = (_a3 = annotation.labelMarkdown) == null ? void 0 : _a3.replace(/<[^>]+>/g, " ");
-    if (normalizeExcludeToken(annotation.label) === EXCLUDE_MARK) return true;
-    if (markdownLabel && normalizeExcludeToken(markdownLabel) === EXCLUDE_MARK) return true;
-    if (annotation.categoryId === void 0) return false;
-    return (annotationCategories != null ? annotationCategories : []).some(
-      (category) => category.id === annotation.categoryId && normalizeExcludeToken(category.label) === EXCLUDE_MARK
-    );
-  };
-  var hasExcludeFromOutputAnnotation = (annotations, annotationCategories) => (annotations != null ? annotations : []).some((annotation) => matchesExcludeFromOutput(annotation, annotationCategories));
-  var findNearestInstanceAncestor = (node) => {
-    let current = node;
-    while (current !== null) {
-      if (current.type === "INSTANCE") return current;
-      current = current.parent;
-    }
-    return null;
-  };
-  var getMainDefinitionLayerForNode = async (node, getMainComponent) => {
-    const instance = findNearestInstanceAncestor(node);
-    if (instance === null) return null;
-    if (node === instance) return getMainComponent(instance);
-    const path = [];
-    let current = node;
-    while (true) {
-      const parent = current.parent;
-      if (parent === null) return null;
-      if (!("children" in parent)) return null;
-      const siblings = parent.children;
-      const index = siblings.indexOf(current);
-      if (index < 0) return null;
-      path.unshift(index);
-      if (parent === instance) break;
-      current = parent;
-    }
-    const main = await getMainComponent(instance);
-    if (main === null) return null;
-    let definition = main;
-    for (const index of path) {
-      if (!("children" in definition)) return null;
-      const nextChildren = definition.children;
-      if (index >= nextChildren.length) return null;
-      definition = nextChildren[index];
-    }
-    return definition;
-  };
-
-  // src/read/alignment.ts
-  var FRAME_ALIGNMENT = {
-    HORIZONTAL_MIN_MIN: "alignment-top-left",
-    HORIZONTAL_MIN_CENTER: "alignment-left",
-    HORIZONTAL_MIN_MAX: "alignment-bottom-left",
-    HORIZONTAL_MIN_BASELINE: "alignment-top-left",
-    HORIZONTAL_CENTER_MIN: "alignment-top-center",
-    HORIZONTAL_CENTER_CENTER: "alignment-center",
-    HORIZONTAL_CENTER_MAX: "alignment-bottom-center",
-    HORIZONTAL_CENTER_BASELINE: "alignment-top-center",
-    HORIZONTAL_MAX_MIN: "alignment-top-right",
-    HORIZONTAL_MAX_CENTER: "alignment-right",
-    HORIZONTAL_MAX_MAX: "alignment-bottom-right",
-    HORIZONTAL_MAX_BASELINE: "alignment-top-right",
-    HORIZONTAL_SPACE_BETWEEN_MIN: "alignment-top-center",
-    HORIZONTAL_SPACE_BETWEEN_CENTER: "alignment-center",
-    HORIZONTAL_SPACE_BETWEEN_MAX: "alignment-bottom-center",
-    HORIZONTAL_SPACE_BETWEEN_BASELINE: "alignment-top-center",
-    VERTICAL_MIN_MIN: "alignment-top-left",
-    VERTICAL_MIN_CENTER: "alignment-top-center",
-    VERTICAL_MIN_MAX: "alignment-top-right",
-    VERTICAL_MIN_BASELINE: "alignment-top-left",
-    VERTICAL_CENTER_MIN: "alignment-left",
-    VERTICAL_CENTER_CENTER: "alignment-center",
-    VERTICAL_CENTER_MAX: "alignment-right",
-    VERTICAL_CENTER_BASELINE: "alignment-left",
-    VERTICAL_MAX_MIN: "alignment-bottom-left",
-    VERTICAL_MAX_CENTER: "alignment-bottom-center",
-    VERTICAL_MAX_MAX: "alignment-bottom-right",
-    VERTICAL_MAX_BASELINE: "alignment-bottom-left",
-    VERTICAL_SPACE_BETWEEN_MIN: "alignment-left",
-    VERTICAL_SPACE_BETWEEN_CENTER: "alignment-center",
-    VERTICAL_SPACE_BETWEEN_MAX: "alignment-right",
-    VERTICAL_SPACE_BETWEEN_BASELINE: "alignment-left"
-  };
-  var readAlignmentFrame = (node) => {
-    const properties = {};
-    const errors = [];
-    if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
-      properties[FRAME_ALIGNMENT["".concat(node.layoutMode, "_").concat(node.primaryAxisAlignItems, "_").concat(node.counterAxisAlignItems)]] = true;
-    }
-    return { properties, errors, warnings: [] };
-  };
-  var TEXT_ALIGNMENT = {
-    LEFT: "typography-align-left",
-    CENTER: "typography-align-center",
-    RIGHT: "typography-align-right"
-  };
-  var readAlignmentText = (node) => {
-    const alignment = node.textAlignHorizontal;
-    if (alignment === "LEFT" || alignment === "CENTER" || alignment === "RIGHT") {
-      return { properties: { [TEXT_ALIGNMENT[alignment]]: true }, errors: [], warnings: [] };
-    }
-    return {
-      properties: {},
-      errors: [],
-      warnings: [
-        {
-          nodeId: node.id,
-          layer: truncateName(node.name),
-          property: "TEXT ALIGNMENT",
-          problem: "must be left, center or right",
-          value: formatValue(alignment),
-          explanation: "Rendered left aligned."
-        }
-      ]
-    };
   };
 
   // unison-components/dist/design-tokens.ts
@@ -917,7 +689,56 @@
     ["corner-radius-bottom-left", "rounded-bl"],
     ["corner-radius-bottom-right", "rounded-br"]
   ];
-  var COLOR_GROUPS = ["fill", "fill-hover", "stroke", "stroke-hover"];
+  var STATE_VARIANTS = {
+    hover: { web: "hover", native: "hover" },
+    active: { web: "active", native: "active" },
+    "focus-visible": { web: "focus-visible", native: "focus" },
+    disabled: { web: "data-[disabled=true]", native: "data-[disabled=true]" },
+    selected: { web: "data-[selected=true]", native: "data-[selected=true]" }
+  };
+  var COLOR_COMPONENTS = {
+    Frame: {
+      fill: {
+        prefix: "bg",
+        states: ["hover", "active", "focus-visible", "disabled", "selected"],
+        groupStates: ["hover", "active", "focus-visible"]
+      },
+      stroke: { prefix: "outline", states: ["hover", "focus-visible"], groupStates: ["hover"] }
+    },
+    Text: { fill: { prefix: "text", states: ["hover"], groupStates: ["hover", "active", "focus-visible"] } },
+    Vector: { fill: { prefix: "text", states: [], groupStates: ["hover", "active", "focus-visible"] } }
+  };
+  var colorConfigs = (component) => Object.entries(COLOR_COMPONENTS[component]);
+  var colorStateClassPrefixes = (component, platform) => colorConfigs(component).flatMap(([property, { prefix, states, groupStates }]) => [
+    ...states.map(
+      (state) => ["".concat(property, "-").concat(state), "".concat(STATE_VARIANTS[state][platform], ":").concat(prefix)]
+    ),
+    ...groupStates.map(
+      (state) => ["group-".concat(state, "-").concat(property), "group-".concat(STATE_VARIANTS[state][platform], ":").concat(prefix)]
+    )
+  ]);
+  var COLOR_GROUPS = [
+    ...new Set(
+      Object.keys(COLOR_COMPONENTS).flatMap((component) => [
+        ...colorConfigs(component).map(([property]) => property),
+        ...colorStateClassPrefixes(component, "web").map(([group]) => group)
+      ])
+    )
+  ];
+  var COLOR_CLASS_PREFIXES = /* @__PURE__ */ new Map();
+  var _a;
+  for (const component of Object.keys(COLOR_COMPONENTS)) {
+    const prefixes = [
+      ...colorConfigs(component).map(([property, { prefix }]) => [property, prefix]),
+      ...colorStateClassPrefixes(component, "web"),
+      ...colorStateClassPrefixes(component, "native")
+    ];
+    for (const [group, prefix] of prefixes) {
+      const classPrefixes = (_a = COLOR_CLASS_PREFIXES.get(group)) != null ? _a : /* @__PURE__ */ new Set();
+      classPrefixes.add(prefix);
+      COLOR_CLASS_PREFIXES.set(group, classPrefixes);
+    }
+  }
   var MOTION_GROUPS = [
     ["transition", "transition", TRANSITION_PROPERTIES],
     ["transition-duration", "duration", TRANSITION_DURATIONS],
@@ -945,14 +766,14 @@
     "typography-decoration": ["typography-decoration-underline"],
     "typography-settings": ["typography-settings-truncate"],
     "pointer-events": ["pointer-events-none", "pointer-events-auto"],
-    tailwind: ["tailwind-group", "tailwind-group-hover-fill"]
+    group: ["group"]
   };
   var table = /* @__PURE__ */ new Map();
   var add = (name, flag) => table.set(name, Object.freeze(flag));
-  var _a;
+  var _a2;
   for (const [group, prefix] of SPACING_GROUPS) {
     for (const key of Object.keys(SPACING)) {
-      add("".concat(group, "-").concat(key), { group, className: "".concat(prefix, "-").concat((_a = SPACING_TAILWIND[key]) != null ? _a : key) });
+      add("".concat(group, "-").concat(key), { group, className: "".concat(prefix, "-").concat((_a2 = SPACING_TAILWIND[key]) != null ? _a2 : key) });
     }
   }
   for (const [group, prefix] of RADIUS_GROUPS) {
@@ -965,10 +786,10 @@
   for (const [group, prefix, scale] of MOTION_GROUPS) {
     for (const key of Object.keys(scale)) add("".concat(group, "-").concat(key), { group, className: "".concat(prefix, "-").concat(key), key });
   }
-  var _a2;
+  var _a3;
   for (const axis of ["width", "height"]) {
     for (const key of Object.keys(SPACING)) {
-      add("".concat(axis, "-").concat(key), { group: axis, mode: "exact", unit: (_a2 = SPACING_TAILWIND[key]) != null ? _a2 : key, container: false });
+      add("".concat(axis, "-").concat(key), { group: axis, mode: "exact", unit: (_a3 = SPACING_TAILWIND[key]) != null ? _a3 : key, container: false });
     }
     for (const mode of SIZE_MODES) add("".concat(axis, "-").concat(mode), { group: "".concat(axis, "-mode"), mode });
   }
@@ -988,6 +809,119 @@
   }
   for (const name of Object.values(NAMED_FLAGS).flat()) add(name, { group: "other" });
   var FLAG_PREFIXES = new Set([...table.keys()].map((name) => name.split("-")[0]));
+
+  // src/utilities.ts
+  var formatHexByte = (value) => {
+    const clamped = Math.max(0, Math.min(255, Math.round(value)));
+    const hex = clamped.toString(16).toUpperCase();
+    return hex.length === 1 ? "0".concat(hex) : hex;
+  };
+  var convertRgbToHex = (rgb) => "#".concat(formatHexByte(rgb.r * 255)).concat(formatHexByte(rgb.g * 255)).concat(formatHexByte(rgb.b * 255));
+  var INDENT = " ".repeat(4);
+  var META_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "children", "characters"]);
+  var STRING_PROP_KEYS = {
+    Vector: ["path", "viewBox", "fillRule"]
+  };
+  var PANEL_ORDER = [
+    "autolayout-",
+    "wrap",
+    "width-",
+    "height-",
+    "alignment-",
+    "gap-",
+    "gap-horizontal-",
+    "gap-vertical-",
+    "padding-",
+    "padding-horizontal-",
+    "padding-vertical-",
+    "padding-left-",
+    "padding-top-",
+    "padding-right-",
+    "padding-bottom-",
+    "corner-radius-",
+    "corner-radius-top-left-",
+    "corner-radius-top-right-",
+    "corner-radius-bottom-right-",
+    "corner-radius-bottom-left-",
+    "typography-",
+    "typography-align-",
+    "typography-decoration-",
+    "typography-settings-",
+    "fill-",
+    "fill-hover-",
+    "group-hover-fill-",
+    "stroke-",
+    "stroke-style-",
+    "stroke-hover-",
+    "group-hover-stroke-",
+    "effect-",
+    "group"
+  ];
+  var getPanelRank = (flag) => {
+    let rank = PANEL_ORDER.length;
+    let length = 0;
+    for (const [index, prefix] of PANEL_ORDER.entries()) {
+      if (flag.startsWith(prefix) && prefix.length > length) {
+        rank = index;
+        length = prefix.length;
+      }
+    }
+    return rank;
+  };
+  var compareByPanelOrder = (a, b) => getPanelRank(a) - getPanelRank(b) || a.localeCompare(b);
+  var SKIP_WRAPPER_TYPES = /* @__PURE__ */ new Set(["SLOT"]);
+  var getFlagKeys = (properties) => Object.keys(properties).filter((key) => !META_KEYS.has(key) && properties[key] === true);
+  var formatOpenTag = (tag, properties, indentation, selfClosing) => {
+    var _a4;
+    const flags = getFlagKeys(properties).sort(compareByPanelOrder);
+    const attributes = ((_a4 = STRING_PROP_KEYS[tag]) != null ? _a4 : []).filter((key) => typeof properties[key] === "string").map((key) => "".concat(key, '="').concat(properties[key], '"'));
+    const keys = [...flags, ...attributes];
+    if (keys.length === 0) return selfClosing ? "".concat(indentation, "<").concat(tag, " />") : "".concat(indentation, "<").concat(tag, ">");
+    const lines = [
+      "".concat(indentation, "<").concat(tag),
+      ...keys.map((key) => "".concat(indentation, "  ").concat(key)),
+      selfClosing ? "".concat(indentation, "/>") : "".concat(indentation, ">")
+    ];
+    return lines.join("\n");
+  };
+  var FRAME_TYPES = /* @__PURE__ */ new Set(["FRAME", "GROUP", "COMPONENT", "INSTANCE"]);
+  var resolveTag = (properties) => {
+    if (properties.type === "TEXT") return "Text";
+    if (properties.type === "VECTOR") return "Vector";
+    if (FRAME_TYPES.has(String(properties.type))) return "Frame";
+    return "This";
+  };
+  var renderChildren = (children, indentation) => children.map((child) => renderNode(child, indentation)).filter((part) => part.length > 0).join("\n");
+  var renderNode = (node, indentation) => {
+    var _a4;
+    const { properties } = node;
+    if (properties.EXCLUDE_FROM_OUTPUT === true) return "";
+    const tag = resolveTag(properties);
+    const children = (_a4 = properties.children) != null ? _a4 : [];
+    const type = properties.type;
+    if (typeof type === "string" && SKIP_WRAPPER_TYPES.has(type)) return renderChildren(children, indentation);
+    if (tag === "Frame" && getFlagKeys(properties).length === 0) return renderChildren(children, indentation);
+    const selfClosing = tag === "Vector" || tag === "This" && children.length === 0;
+    const open = formatOpenTag(tag, properties, indentation, selfClosing);
+    if (selfClosing) return open;
+    if (tag === "Text")
+      return [open, "".concat(indentation).concat(INDENT).concat(properties.characters), "".concat(indentation, "</Text>")].join("\n");
+    const inner = renderChildren(children, "".concat(indentation).concat(INDENT));
+    return [open, ...inner.length > 0 ? [inner] : [], "".concat(indentation, "</").concat(tag, ">")].join("\n");
+  };
+  var renderComponentCode = (tree) => renderNode(tree, "");
+  var formatValue = (value, unit = "px") => typeof value === "number" ? "".concat(Math.round(value * 100) / 100).concat(unit) : value.toLowerCase().replace(/_/g, " ");
+  var MAX_NAME_LENGTH = 15;
+  var truncateName = (name) => name.length > MAX_NAME_LENGTH ? "".concat(name.slice(0, MAX_NAME_LENGTH), "\u2026") : name;
+  var combineReads = (reads) => ({
+    properties: Object.assign({}, ...reads.map((read) => read.properties)),
+    errors: reads.flatMap((read) => read.errors),
+    warnings: reads.flatMap((read) => read.warnings),
+    notifications: reads.flatMap((read) => {
+      var _a4;
+      return (_a4 = read.notifications) != null ? _a4 : [];
+    })
+  });
 
   // src/maps.ts
   var matchToken = (name, prefix, tokens) => {
@@ -1036,257 +970,20 @@
     return next;
   };
 
-  // src/read/unit.ts
-  var getVariableName = async (alias) => {
-    const variable = (alias == null ? void 0 : alias.id) ? await getVariable(alias.id) : null;
-    return variable == null ? void 0 : variable.name;
-  };
-  var resolveBoundUnitClass = async (prefix, alias) => {
-    const token = resolveSpacingToken(await getVariableName(alias));
-    return token === void 0 ? void 0 : "".concat(prefix).concat(token);
-  };
-  var resolveBoundRadiusClass = async (prefix, alias) => {
-    const token = resolveRadiusToken(await getVariableName(alias));
-    return token === void 0 ? void 0 : "".concat(prefix).concat(token);
-  };
-  var resolveBoundWidthClass = async (alias) => {
-    const name = await getVariableName(alias);
-    const container = resolveContainerToken(name);
-    const spacing = resolveSpacingToken(name);
-    if (container !== void 0) return "width-".concat(container);
-    return spacing === void 0 ? void 0 : "width-".concat(spacing);
-  };
-
-  // src/read/cornerRadius.ts
-  var hasDiscreteCorners = (node) => "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node;
-  var getCornerError = (node, problem, value, label) => ({
-    nodeId: node.id,
-    layer: truncateName(node.name),
-    property: label ? "CORNER RADIUS ".concat(label) : "CORNER RADIUS",
-    problem,
-    value: formatValue(value)
-  });
-  var emitCorner = async (node, prefix, value, bound, properties, errors, label) => {
-    if (value > 0 && bound === void 0) {
-      errors.push(getCornerError(node, "not bound", value, label));
-      return;
-    }
-    if (value === 0 && bound === void 0) {
-      properties["".concat(prefix, "none")] = true;
-      return;
-    }
-    const className = await resolveBoundRadiusClass(prefix, bound);
-    if (className) {
-      properties[className] = true;
-      return;
-    }
-    errors.push(getCornerError(node, "not a token", value, label));
-  };
-  var readDiscreteCorners = async (node) => {
-    var _a3, _b, _c, _d, _e;
-    const properties = {};
-    const errors = [];
-    const corners = [
-      {
-        value: node.topLeftRadius,
-        bound: (_a3 = node.boundVariables) == null ? void 0 : _a3.topLeftRadius,
-        prefix: "corner-radius-top-left-",
-        label: "TOP LEFT"
-      },
-      {
-        value: node.topRightRadius,
-        bound: (_b = node.boundVariables) == null ? void 0 : _b.topRightRadius,
-        prefix: "corner-radius-top-right-",
-        label: "TOP RIGHT"
-      },
-      {
-        value: node.bottomLeftRadius,
-        bound: (_c = node.boundVariables) == null ? void 0 : _c.bottomLeftRadius,
-        prefix: "corner-radius-bottom-left-",
-        label: "BOTTOM LEFT"
-      },
-      {
-        value: node.bottomRightRadius,
-        bound: (_d = node.boundVariables) == null ? void 0 : _d.bottomRightRadius,
-        prefix: "corner-radius-bottom-right-",
-        label: "BOTTOM RIGHT"
-      }
-    ];
-    const counts = /* @__PURE__ */ new Map();
-    for (const corner of corners) {
-      counts.set(corner.value, ((_e = counts.get(corner.value)) != null ? _e : 0) + 1);
-    }
-    let baseValue = corners[0].value;
-    let baseCount = 0;
-    for (const [value, count] of counts) {
-      if (count > baseCount) {
-        baseValue = value;
-        baseCount = count;
-      }
-    }
-    if (baseCount === 4 && baseValue <= 0) return { properties, errors, warnings: [] };
-    if (baseCount === 4 && corners.some((corner) => corner.bound === void 0)) {
-      errors.push(getCornerError(node, "not bound", baseValue));
-      return { properties, errors, warnings: [] };
-    }
-    if (baseCount === 4) {
-      await emitCorner(node, "corner-radius-", baseValue, corners[0].bound, properties, errors);
-      return { properties, errors, warnings: [] };
-    }
-    const base = corners.find((corner) => corner.value === baseValue);
-    const useBase = baseCount >= 2 && baseValue > 0 && base !== void 0;
-    if (useBase) {
-      await emitCorner(node, "corner-radius-", baseValue, base.bound, properties, errors);
-      for (const corner of corners) {
-        if (corner.value === baseValue) continue;
-        await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
-      }
-      return { properties, errors, warnings: [] };
-    }
-    for (const corner of corners) {
-      if (corner.value <= 0) continue;
-      await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
-    }
-    return { properties, errors, warnings: [] };
-  };
-  var readCornerRadius = async (node) => {
-    var _a3;
-    if (hasDiscreteCorners(node)) return readDiscreteCorners(node);
-    if (node.cornerRadius === figma.mixed) {
-      return {
-        properties: {},
-        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "CORNER RADIUS", problem: "mixed" }],
-        warnings: []
-      };
-    }
-    const properties = {};
-    const errors = [];
-    if (node.cornerRadius > 0) {
-      await emitCorner(node, "corner-radius-", node.cornerRadius, (_a3 = node.boundVariables) == null ? void 0 : _a3.topLeftRadius, properties, errors);
-    }
-    return { properties, errors, warnings: [] };
-  };
-
-  // src/read/dimensions.ts
-  var readSize = async (node, label, sizing, size, bound, resolveFixedClass, sizingFlags, errors) => {
-    if (sizing === "FIXED" && bound) {
-      const className = await resolveFixedClass(bound);
-      if (className === void 0) {
-        errors.push({
-          nodeId: node.id,
-          layer: truncateName(node.name),
-          property: "".concat(label),
-          problem: "not a token",
-          value: formatValue(size)
-        });
-      }
-      return className;
-    }
-    if (sizing === "FIXED") {
-      errors.push({
-        nodeId: node.id,
-        layer: truncateName(node.name),
-        property: "".concat(label),
-        problem: "not bound",
-        value: formatValue(size)
-      });
-      return void 0;
-    }
-    if (sizing !== "FILL" && sizing !== "HUG") {
-      errors.push({
-        nodeId: node.id,
-        layer: truncateName(node.name),
-        property: "".concat(label),
-        problem: "must be fill or hug",
-        value: formatValue(sizing)
-      });
-      return void 0;
-    }
-    return sizingFlags[sizing];
-  };
-  var readDimensions = async (node) => {
-    var _a3, _b;
-    const properties = {};
-    const errors = [];
-    const width = await readSize(
-      node,
-      "WIDTH",
-      node.layoutSizingHorizontal,
-      node.width,
-      (_a3 = node.boundVariables) == null ? void 0 : _a3.width,
-      resolveBoundWidthClass,
-      WIDTH_SIZING,
-      errors
-    );
-    const height = await readSize(
-      node,
-      "HEIGHT",
-      node.layoutSizingVertical,
-      node.height,
-      (_b = node.boundVariables) == null ? void 0 : _b.height,
-      (bound) => resolveBoundUnitClass("height-", bound),
-      HEIGHT_SIZING,
-      errors
-    );
-    if (width) properties[width] = true;
-    if (height) properties[height] = true;
-    return { properties, errors, warnings: [] };
-  };
-
-  // src/read/effect.ts
-  var readEffect = async (node) => {
-    var _a3, _b, _c;
-    if (!node.effects.some((effect) => effect.visible)) return { properties: {}, errors: [], warnings: [] };
-    if (node.effectStyleId === "") {
-      return {
-        properties: {},
-        errors: [
-          {
-            nodeId: node.id,
-            layer: truncateName(node.name),
-            property: "EFFECT",
-            problem: "not bound",
-            value: formatValue((_b = (_a3 = node.effects.find((effect) => effect.visible)) == null ? void 0 : _a3.type) != null ? _b : ""),
-            explanation: "Shadows are read from shadow-* effect styles, so this one is left out."
-          }
-        ],
-        warnings: []
-      };
-    }
-    const style = await figma.getStyleByIdAsync(node.effectStyleId);
-    const token = style ? resolveShadowToken(style.name) : void 0;
-    if (token === void 0) {
-      return {
-        properties: {},
-        errors: [
-          {
-            nodeId: node.id,
-            layer: truncateName(node.name),
-            property: "EFFECT",
-            problem: "not a token",
-            value: (_c = style == null ? void 0 : style.name) != null ? _c : node.effectStyleId
-          }
-        ],
-        warnings: []
-      };
-    }
-    return { properties: { ["effect-shadow-".concat(token)]: true }, errors: [], warnings: [] };
-  };
-
   // src/read/color.ts
   var resolveBoundPaintColor = async (prefix, paint) => {
-    var _a3, _b, _c;
-    const id = (_b = (_a3 = paint.boundVariables) == null ? void 0 : _a3.color) == null ? void 0 : _b.id;
+    var _a4, _b, _c;
+    const id = (_b = (_a4 = paint.boundVariables) == null ? void 0 : _a4.color) == null ? void 0 : _b.id;
     const variable = id ? await getVariable(id) : null;
     const token = resolveColorToken(variable == null ? void 0 : variable.name);
     const className = token === void 0 ? void 0 : "".concat(prefix).concat(token);
     return { className, label: (_c = variable == null ? void 0 : variable.name) != null ? _c : convertRgbToHex(paint.color) };
   };
   var readPaints = async (node, kind, paints) => {
-    var _a3, _b, _c;
+    var _a4, _b, _c;
     const layer = truncateName(node.name);
     const visiblePaints = paints.filter((paint2) => paint2.visible !== false);
-    const paint = (_a3 = visiblePaints[0]) != null ? _a3 : paints[0];
+    const paint = (_a4 = visiblePaints[0]) != null ? _a4 : paints[0];
     if (paint === void 0) return { properties: {}, errors: [], warnings: [] };
     if (visiblePaints.length > 1) {
       return {
@@ -1369,6 +1066,441 @@
     return readPaints(node, "FILL", node.fills);
   };
 
+  // src/read/hover.ts
+  var EMPTY = { properties: {}, errors: [], warnings: [] };
+  var findHover = async (node) => {
+    var _a4, _b, _c;
+    if (!("reactions" in node)) return void 0;
+    const main = node.type === "INSTANCE" && node.reactions.length === 0 ? await node.getMainComponentAsync() : null;
+    const reactions = (_a4 = main == null ? void 0 : main.reactions) != null ? _a4 : node.reactions;
+    for (const reaction of reactions) {
+      if (((_b = reaction.trigger) == null ? void 0 : _b.type) !== "ON_HOVER") continue;
+      for (const action of (_c = reaction.actions) != null ? _c : []) {
+        if (action.type !== "NODE" || action.navigation !== "CHANGE_TO" || action.destinationId === null) continue;
+        const variant = await figma.getNodeByIdAsync(action.destinationId);
+        if (variant !== null && "visible" in variant) return { variant };
+      }
+    }
+    return void 0;
+  };
+  var findCounterpart = (child, index, counterpart) => {
+    if (!("children" in counterpart)) return void 0;
+    const atIndex = counterpart.children[index];
+    if ((atIndex == null ? void 0 : atIndex.name) === child.name) return atIndex;
+    return counterpart.children.find((candidate) => candidate.name === child.name);
+  };
+  var getPaints = (node, kind) => {
+    if (kind === "FILL") return "fills" in node ? node.fills : void 0;
+    return "strokes" in node ? node.strokes : void 0;
+  };
+  var isSamePaint = (node, counterpart, kind) => JSON.stringify(getPaints(node, kind)) === JSON.stringify(getPaints(counterpart, kind));
+  var readColor = async (node, kind) => {
+    const paints = getPaints(node, kind);
+    if (paints === void 0) return EMPTY;
+    if (kind === "FILL") return readFill(node);
+    return readPaints(node, kind, paints);
+  };
+  var toHoverIssue = (issue) => __spreadProps(__spreadValues({}, issue), { property: "HOVER ".concat(issue.property) });
+  var readHoverColor = async (node, counterpart, kind, flag) => {
+    var _a4;
+    if (isSamePaint(node, counterpart, kind)) return EMPTY;
+    const prefix = "".concat(kind.toLowerCase(), "-");
+    const hover = await readColor(counterpart, kind);
+    if (hover.errors.length > 0) return { properties: {}, errors: hover.errors.map(toHoverIssue), warnings: [] };
+    const color = (_a4 = Object.keys(hover.properties).find((key) => key.startsWith(prefix))) == null ? void 0 : _a4.slice(prefix.length);
+    return {
+      properties: { [flag(color != null ? color : "transparent")]: true },
+      errors: [],
+      warnings: hover.warnings.map(toHoverIssue)
+    };
+  };
+  var readHover = async (node, hover) => combineReads([
+    await readHoverColor(node, hover.variant, "FILL", (color) => "fill-hover-".concat(color)),
+    await readHoverColor(node, hover.variant, "STROKE", (color) => "stroke-hover-".concat(color))
+  ]);
+  var followsGroupHover = (component, property) => {
+    var _a4;
+    const config = COLOR_COMPONENTS[component][property];
+    return (_a4 = config == null ? void 0 : config.groupStates.includes("hover")) != null ? _a4 : false;
+  };
+  var readGroupHover = async (node, counterpart, component) => {
+    const reads = await Promise.all(
+      ["FILL", "STROKE"].map(async (kind) => {
+        const property = kind === "FILL" ? "fill" : "stroke";
+        if (followsGroupHover(component, property)) {
+          return readHoverColor(node, counterpart, kind, (color) => "group-hover-".concat(property, "-").concat(color));
+        }
+        if (isSamePaint(node, counterpart, kind)) return EMPTY;
+        const warning = {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "HOVER ".concat(kind),
+          problem: "unsupported",
+          explanation: "A ".concat(component, " can't change its ").concat(property, " with its parent's hover, so this keeps it.")
+        };
+        return { properties: {}, errors: [], warnings: [warning] };
+      })
+    );
+    return combineReads(reads);
+  };
+
+  // src/serialize/annotationExclude.ts
+  var EXCLUDE_MARK = "EXCLUDE_FROM_OUTPUT";
+  var normalizeExcludeToken = (text) => (text != null ? text : "").trim().toUpperCase();
+  var matchesExcludeFromOutput = (annotation, annotationCategories) => {
+    var _a4;
+    const markdownLabel = (_a4 = annotation.labelMarkdown) == null ? void 0 : _a4.replace(/<[^>]+>/g, " ");
+    if (normalizeExcludeToken(annotation.label) === EXCLUDE_MARK) return true;
+    if (markdownLabel && normalizeExcludeToken(markdownLabel) === EXCLUDE_MARK) return true;
+    if (annotation.categoryId === void 0) return false;
+    return (annotationCategories != null ? annotationCategories : []).some(
+      (category) => category.id === annotation.categoryId && normalizeExcludeToken(category.label) === EXCLUDE_MARK
+    );
+  };
+  var hasExcludeFromOutputAnnotation = (annotations, annotationCategories) => (annotations != null ? annotations : []).some((annotation) => matchesExcludeFromOutput(annotation, annotationCategories));
+  var findNearestInstanceAncestor = (node) => {
+    let current = node;
+    while (current !== null) {
+      if (current.type === "INSTANCE") return current;
+      current = current.parent;
+    }
+    return null;
+  };
+  var getMainDefinitionLayerForNode = async (node, getMainComponent) => {
+    const instance = findNearestInstanceAncestor(node);
+    if (instance === null) return null;
+    if (node === instance) return getMainComponent(instance);
+    const path = [];
+    let current = node;
+    while (true) {
+      const parent = current.parent;
+      if (parent === null) return null;
+      if (!("children" in parent)) return null;
+      const siblings = parent.children;
+      const index = siblings.indexOf(current);
+      if (index < 0) return null;
+      path.unshift(index);
+      if (parent === instance) break;
+      current = parent;
+    }
+    const main = await getMainComponent(instance);
+    if (main === null) return null;
+    let definition = main;
+    for (const index of path) {
+      if (!("children" in definition)) return null;
+      const nextChildren = definition.children;
+      if (index >= nextChildren.length) return null;
+      definition = nextChildren[index];
+    }
+    return definition;
+  };
+
+  // src/read/alignment.ts
+  var FRAME_ALIGNMENT = {
+    HORIZONTAL_MIN_MIN: "alignment-top-left",
+    HORIZONTAL_MIN_CENTER: "alignment-left",
+    HORIZONTAL_MIN_MAX: "alignment-bottom-left",
+    HORIZONTAL_MIN_BASELINE: "alignment-top-left",
+    HORIZONTAL_CENTER_MIN: "alignment-top-center",
+    HORIZONTAL_CENTER_CENTER: "alignment-center",
+    HORIZONTAL_CENTER_MAX: "alignment-bottom-center",
+    HORIZONTAL_CENTER_BASELINE: "alignment-top-center",
+    HORIZONTAL_MAX_MIN: "alignment-top-right",
+    HORIZONTAL_MAX_CENTER: "alignment-right",
+    HORIZONTAL_MAX_MAX: "alignment-bottom-right",
+    HORIZONTAL_MAX_BASELINE: "alignment-top-right",
+    HORIZONTAL_SPACE_BETWEEN_MIN: "alignment-top-center",
+    HORIZONTAL_SPACE_BETWEEN_CENTER: "alignment-center",
+    HORIZONTAL_SPACE_BETWEEN_MAX: "alignment-bottom-center",
+    HORIZONTAL_SPACE_BETWEEN_BASELINE: "alignment-top-center",
+    VERTICAL_MIN_MIN: "alignment-top-left",
+    VERTICAL_MIN_CENTER: "alignment-top-center",
+    VERTICAL_MIN_MAX: "alignment-top-right",
+    VERTICAL_MIN_BASELINE: "alignment-top-left",
+    VERTICAL_CENTER_MIN: "alignment-left",
+    VERTICAL_CENTER_CENTER: "alignment-center",
+    VERTICAL_CENTER_MAX: "alignment-right",
+    VERTICAL_CENTER_BASELINE: "alignment-left",
+    VERTICAL_MAX_MIN: "alignment-bottom-left",
+    VERTICAL_MAX_CENTER: "alignment-bottom-center",
+    VERTICAL_MAX_MAX: "alignment-bottom-right",
+    VERTICAL_MAX_BASELINE: "alignment-bottom-left",
+    VERTICAL_SPACE_BETWEEN_MIN: "alignment-left",
+    VERTICAL_SPACE_BETWEEN_CENTER: "alignment-center",
+    VERTICAL_SPACE_BETWEEN_MAX: "alignment-right",
+    VERTICAL_SPACE_BETWEEN_BASELINE: "alignment-left"
+  };
+  var readAlignmentFrame = (node) => {
+    const properties = {};
+    const errors = [];
+    if (node.layoutMode === "HORIZONTAL" || node.layoutMode === "VERTICAL") {
+      properties[FRAME_ALIGNMENT["".concat(node.layoutMode, "_").concat(node.primaryAxisAlignItems, "_").concat(node.counterAxisAlignItems)]] = true;
+    }
+    return { properties, errors, warnings: [] };
+  };
+  var TEXT_ALIGNMENT = {
+    LEFT: "typography-align-left",
+    CENTER: "typography-align-center",
+    RIGHT: "typography-align-right"
+  };
+  var readAlignmentText = (node) => {
+    const alignment = node.textAlignHorizontal;
+    if (alignment === "LEFT" || alignment === "CENTER" || alignment === "RIGHT") {
+      return { properties: { [TEXT_ALIGNMENT[alignment]]: true }, errors: [], warnings: [] };
+    }
+    return {
+      properties: {},
+      errors: [],
+      warnings: [
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "TEXT ALIGNMENT",
+          problem: "must be left, center or right",
+          value: formatValue(alignment),
+          explanation: "Rendered left aligned."
+        }
+      ]
+    };
+  };
+
+  // src/read/unit.ts
+  var getVariableName = async (alias) => {
+    const variable = (alias == null ? void 0 : alias.id) ? await getVariable(alias.id) : null;
+    return variable == null ? void 0 : variable.name;
+  };
+  var resolveBoundUnitClass = async (prefix, alias) => {
+    const token = resolveSpacingToken(await getVariableName(alias));
+    return token === void 0 ? void 0 : "".concat(prefix).concat(token);
+  };
+  var resolveBoundRadiusClass = async (prefix, alias) => {
+    const token = resolveRadiusToken(await getVariableName(alias));
+    return token === void 0 ? void 0 : "".concat(prefix).concat(token);
+  };
+  var resolveBoundWidthClass = async (alias) => {
+    const name = await getVariableName(alias);
+    const container = resolveContainerToken(name);
+    const spacing = resolveSpacingToken(name);
+    if (container !== void 0) return "width-".concat(container);
+    return spacing === void 0 ? void 0 : "width-".concat(spacing);
+  };
+
+  // src/read/cornerRadius.ts
+  var hasDiscreteCorners = (node) => "topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node;
+  var getCornerError = (node, problem, value, label) => ({
+    nodeId: node.id,
+    layer: truncateName(node.name),
+    property: label ? "CORNER RADIUS ".concat(label) : "CORNER RADIUS",
+    problem,
+    value: formatValue(value)
+  });
+  var emitCorner = async (node, prefix, value, bound, properties, errors, label) => {
+    if (value > 0 && bound === void 0) {
+      errors.push(getCornerError(node, "not bound", value, label));
+      return;
+    }
+    if (value === 0 && bound === void 0) {
+      properties["".concat(prefix, "none")] = true;
+      return;
+    }
+    const className = await resolveBoundRadiusClass(prefix, bound);
+    if (className) {
+      properties[className] = true;
+      return;
+    }
+    errors.push(getCornerError(node, "not a token", value, label));
+  };
+  var readDiscreteCorners = async (node) => {
+    var _a4, _b, _c, _d, _e;
+    const properties = {};
+    const errors = [];
+    const corners = [
+      {
+        value: node.topLeftRadius,
+        bound: (_a4 = node.boundVariables) == null ? void 0 : _a4.topLeftRadius,
+        prefix: "corner-radius-top-left-",
+        label: "TOP LEFT"
+      },
+      {
+        value: node.topRightRadius,
+        bound: (_b = node.boundVariables) == null ? void 0 : _b.topRightRadius,
+        prefix: "corner-radius-top-right-",
+        label: "TOP RIGHT"
+      },
+      {
+        value: node.bottomLeftRadius,
+        bound: (_c = node.boundVariables) == null ? void 0 : _c.bottomLeftRadius,
+        prefix: "corner-radius-bottom-left-",
+        label: "BOTTOM LEFT"
+      },
+      {
+        value: node.bottomRightRadius,
+        bound: (_d = node.boundVariables) == null ? void 0 : _d.bottomRightRadius,
+        prefix: "corner-radius-bottom-right-",
+        label: "BOTTOM RIGHT"
+      }
+    ];
+    const counts = /* @__PURE__ */ new Map();
+    for (const corner of corners) {
+      counts.set(corner.value, ((_e = counts.get(corner.value)) != null ? _e : 0) + 1);
+    }
+    let baseValue = corners[0].value;
+    let baseCount = 0;
+    for (const [value, count] of counts) {
+      if (count > baseCount) {
+        baseValue = value;
+        baseCount = count;
+      }
+    }
+    if (baseCount === 4 && baseValue <= 0) return { properties, errors, warnings: [] };
+    if (baseCount === 4 && corners.some((corner) => corner.bound === void 0)) {
+      errors.push(getCornerError(node, "not bound", baseValue));
+      return { properties, errors, warnings: [] };
+    }
+    if (baseCount === 4) {
+      await emitCorner(node, "corner-radius-", baseValue, corners[0].bound, properties, errors);
+      return { properties, errors, warnings: [] };
+    }
+    const base = corners.find((corner) => corner.value === baseValue);
+    const useBase = baseCount >= 2 && baseValue > 0 && base !== void 0;
+    if (useBase) {
+      await emitCorner(node, "corner-radius-", baseValue, base.bound, properties, errors);
+      for (const corner of corners) {
+        if (corner.value === baseValue) continue;
+        await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
+      }
+      return { properties, errors, warnings: [] };
+    }
+    for (const corner of corners) {
+      if (corner.value <= 0) continue;
+      await emitCorner(node, corner.prefix, corner.value, corner.bound, properties, errors, corner.label);
+    }
+    return { properties, errors, warnings: [] };
+  };
+  var readCornerRadius = async (node) => {
+    var _a4;
+    if (hasDiscreteCorners(node)) return readDiscreteCorners(node);
+    if (node.cornerRadius === figma.mixed) {
+      return {
+        properties: {},
+        errors: [{ nodeId: node.id, layer: truncateName(node.name), property: "CORNER RADIUS", problem: "mixed" }],
+        warnings: []
+      };
+    }
+    const properties = {};
+    const errors = [];
+    if (node.cornerRadius > 0) {
+      await emitCorner(node, "corner-radius-", node.cornerRadius, (_a4 = node.boundVariables) == null ? void 0 : _a4.topLeftRadius, properties, errors);
+    }
+    return { properties, errors, warnings: [] };
+  };
+
+  // src/read/dimensions.ts
+  var readSize = async (node, label, sizing, size, bound, resolveFixedClass, sizingFlags, errors) => {
+    if (sizing === "FIXED" && bound) {
+      const className = await resolveFixedClass(bound);
+      if (className === void 0) {
+        errors.push({
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "".concat(label),
+          problem: "not a token",
+          value: formatValue(size)
+        });
+      }
+      return className;
+    }
+    if (sizing === "FIXED") {
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "".concat(label),
+        problem: "not bound",
+        value: formatValue(size)
+      });
+      return void 0;
+    }
+    if (sizing !== "FILL" && sizing !== "HUG") {
+      errors.push({
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "".concat(label),
+        problem: "must be fill or hug",
+        value: formatValue(sizing)
+      });
+      return void 0;
+    }
+    return sizingFlags[sizing];
+  };
+  var readDimensions = async (node) => {
+    var _a4, _b;
+    const properties = {};
+    const errors = [];
+    const width = await readSize(
+      node,
+      "WIDTH",
+      node.layoutSizingHorizontal,
+      node.width,
+      (_a4 = node.boundVariables) == null ? void 0 : _a4.width,
+      resolveBoundWidthClass,
+      WIDTH_SIZING,
+      errors
+    );
+    const height = await readSize(
+      node,
+      "HEIGHT",
+      node.layoutSizingVertical,
+      node.height,
+      (_b = node.boundVariables) == null ? void 0 : _b.height,
+      (bound) => resolveBoundUnitClass("height-", bound),
+      HEIGHT_SIZING,
+      errors
+    );
+    if (width) properties[width] = true;
+    if (height) properties[height] = true;
+    return { properties, errors, warnings: [] };
+  };
+
+  // src/read/effect.ts
+  var readEffect = async (node) => {
+    var _a4, _b, _c;
+    if (!node.effects.some((effect) => effect.visible)) return { properties: {}, errors: [], warnings: [] };
+    if (node.effectStyleId === "") {
+      return {
+        properties: {},
+        errors: [
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "EFFECT",
+            problem: "not bound",
+            value: formatValue((_b = (_a4 = node.effects.find((effect) => effect.visible)) == null ? void 0 : _a4.type) != null ? _b : ""),
+            explanation: "Shadows are read from shadow-* effect styles, so this one is left out."
+          }
+        ],
+        warnings: []
+      };
+    }
+    const style = await figma.getStyleByIdAsync(node.effectStyleId);
+    const token = style ? resolveShadowToken(style.name) : void 0;
+    if (token === void 0) {
+      return {
+        properties: {},
+        errors: [
+          {
+            nodeId: node.id,
+            layer: truncateName(node.name),
+            property: "EFFECT",
+            problem: "not a token",
+            value: (_c = style == null ? void 0 : style.name) != null ? _c : node.effectStyleId
+          }
+        ],
+        warnings: []
+      };
+    }
+    return { properties: { ["effect-shadow-".concat(token)]: true }, errors: [], warnings: [] };
+  };
+
   // src/read/gap.ts
   var readSpacing = async (node, label, value, bound, errors) => {
     if (bound === void 0) {
@@ -1394,10 +1526,10 @@
     return suffix;
   };
   var readGap = async (node) => {
-    var _a3, _b;
+    var _a4, _b;
     const properties = {};
     const errors = [];
-    const items = node.itemSpacing > 0 ? await readSpacing(node, "GAP", node.itemSpacing, (_a3 = node.boundVariables) == null ? void 0 : _a3.itemSpacing, errors) : void 0;
+    const items = node.itemSpacing > 0 ? await readSpacing(node, "GAP", node.itemSpacing, (_a4 = node.boundVariables) == null ? void 0 : _a4.itemSpacing, errors) : void 0;
     const rowSpacing = node.layoutWrap === "WRAP" ? node.counterAxisSpacing : null;
     const rows = rowSpacing !== null && rowSpacing > 0 ? await readSpacing(node, "GAP VERTICAL", rowSpacing, (_b = node.boundVariables) == null ? void 0 : _b.counterAxisSpacing, errors) : void 0;
     const sameSpacing = rows === void 0 || rows === items;
@@ -1600,7 +1732,7 @@
 
   // src/serialize/frame.ts
   var serializeFrame = async (node) => {
-    const _a3 = combineReads([
+    const _a4 = combineReads([
       readLayerSettings(node),
       readLayout(node),
       await readDimensions(node),
@@ -1611,7 +1743,7 @@
       await readFill(node),
       await readStroke(node),
       await readEffect(node)
-    ]), { properties } = _a3, issues = __objRest(_a3, ["properties"]);
+    ]), { properties } = _a4, issues = __objRest(_a4, ["properties"]);
     return __spreadValues({
       properties: __spreadProps(__spreadValues(__spreadValues({}, readIdentity(node)), properties), {
         children: node.children
@@ -1643,7 +1775,7 @@
 
   // src/read/typography.ts
   var readTypography = async (node) => {
-    var _a3;
+    var _a4;
     if (node.textStyleId === "") {
       return {
         properties: {},
@@ -1686,7 +1818,7 @@
             layer: truncateName(node.name),
             property: "TYPOGRAPHY",
             problem: "not a token",
-            value: (_a3 = style == null ? void 0 : style.name) != null ? _a3 : node.textStyleId
+            value: (_a4 = style == null ? void 0 : style.name) != null ? _a4 : node.textStyleId
           }
         ],
         warnings: []
@@ -1714,16 +1846,36 @@
       ]
     };
   };
+  var readTextTruncation = (node) => {
+    if (node.textTruncation !== "ENDING") return { properties: {}, errors: [], warnings: [] };
+    const properties = { "typography-settings-truncate": true };
+    if (node.maxLines === null || node.maxLines === 1) return { properties, errors: [], warnings: [] };
+    return {
+      properties,
+      errors: [],
+      warnings: [
+        {
+          nodeId: node.id,
+          layer: truncateName(node.name),
+          property: "MAX LINES",
+          problem: "must be 1",
+          value: node.maxLines,
+          explanation: "Truncated after one line."
+        }
+      ]
+    };
+  };
 
   // src/serialize/text.ts
   var serializeText = async (node) => {
-    const _a3 = combineReads([
+    const _a4 = combineReads([
       readLayerSettings(node),
       await readTypography(node),
       readAlignmentText(node),
       readTextDecoration(node),
+      readTextTruncation(node),
       await readFill(node)
-    ]), { properties } = _a3, issues = __objRest(_a3, ["properties"]);
+    ]), { properties } = _a4, issues = __objRest(_a4, ["properties"]);
     return __spreadValues({
       properties: __spreadProps(__spreadValues(__spreadValues({}, readIdentity(node)), properties), {
         characters: node.characters
@@ -1732,19 +1884,19 @@
   };
 
   // src/serialize/unsupported.ts
-  var WRAPPER_TYPES = /* @__PURE__ */ new Set(["INSTANCE", "COMPONENT", "SLOT"]);
-  var EMPTY = { properties: {}, errors: [], warnings: [] };
+  var WRAPPER_TYPES = /* @__PURE__ */ new Set(["SLOT"]);
+  var EMPTY2 = { properties: {}, errors: [], warnings: [] };
   var serializeUnsupported = async (node) => {
-    const layout = "layoutMode" in node ? readLayout(node) : EMPTY;
-    const dimensions = "layoutSizingHorizontal" in node ? await readDimensions(node) : EMPTY;
-    const alignment = "layoutMode" in node ? readAlignmentFrame(node) : EMPTY;
-    const gap = "itemSpacing" in node ? await readGap(node) : EMPTY;
-    const padding = "paddingLeft" in node ? await readPadding(node) : EMPTY;
-    const cornerRadius = node.type !== "ELLIPSE" && "cornerSmoothing" in node ? await readCornerRadius(node) : EMPTY;
-    const fill = "fills" in node ? await readFill(node) : EMPTY;
-    const stroke = "strokes" in node ? await readStroke(node) : EMPTY;
-    const effect = "effects" in node ? await readEffect(node) : EMPTY;
-    const _a3 = combineReads([
+    const layout = "layoutMode" in node ? readLayout(node) : EMPTY2;
+    const dimensions = "layoutSizingHorizontal" in node ? await readDimensions(node) : EMPTY2;
+    const alignment = "layoutMode" in node ? readAlignmentFrame(node) : EMPTY2;
+    const gap = "itemSpacing" in node ? await readGap(node) : EMPTY2;
+    const padding = "paddingLeft" in node ? await readPadding(node) : EMPTY2;
+    const cornerRadius = node.type !== "ELLIPSE" && "cornerSmoothing" in node ? await readCornerRadius(node) : EMPTY2;
+    const fill = "fills" in node ? await readFill(node) : EMPTY2;
+    const stroke = "strokes" in node ? await readStroke(node) : EMPTY2;
+    const effect = "effects" in node ? await readEffect(node) : EMPTY2;
+    const _a4 = combineReads([
       readLayerSettings(node),
       layout,
       dimensions,
@@ -1755,7 +1907,7 @@
       fill,
       stroke,
       effect
-    ]), { properties } = _a3, issues = __objRest(_a3, ["properties"]);
+    ]), { properties } = _a4, issues = __objRest(_a4, ["properties"]);
     return __spreadProps(__spreadValues({
       properties: __spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), properties), node.type === "ELLIPSE" ? { "corner-radius-full": true } : {})
     }, issues), {
@@ -1776,6 +1928,10 @@
   // src/serialize/vector.ts
   var round = (value) => String(Math.round(value * 100) / 100);
   var roundPath = (data) => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (number) => round(Number(number)));
+  var resolvePixelClass = async (prefix, alias) => {
+    const className = await resolveBoundUnitClass(prefix, alias);
+    return className === "".concat(prefix, "full") ? void 0 : className;
+  };
   var serializeVector = async (node, box = node) => {
     const fill = await readFill(node);
     const errors = [...fill.errors];
@@ -1789,8 +1945,8 @@
       });
     }
     const bound = "boundVariables" in box ? box.boundVariables : void 0;
-    const width = (bound == null ? void 0 : bound.width) !== void 0 ? await resolveBoundUnitClass("width-", bound.width) : void 0;
-    const height = (bound == null ? void 0 : bound.height) !== void 0 ? await resolveBoundUnitClass("height-", bound.height) : void 0;
+    const width = (bound == null ? void 0 : bound.width) !== void 0 ? await resolvePixelClass("width-", bound.width) : void 0;
+    const height = (bound == null ? void 0 : bound.height) !== void 0 ? await resolvePixelClass("height-", bound.height) : void 0;
     if ((bound == null ? void 0 : bound.width) === void 0) {
       errors.push({
         nodeId: box.id,
@@ -1838,8 +1994,8 @@
         explanation: "Only the vector's fill is rendered, so its outline is lost."
       });
     }
-    const minX = box === node ? 0 : box.x - node.x;
-    const minY = box === node ? 0 : box.y - node.y;
+    const minX = box === node ? 0 : box.absoluteTransform[0][2] - node.absoluteTransform[0][2];
+    const minY = box === node ? 0 : box.absoluteTransform[1][2] - node.absoluteTransform[1][2];
     return {
       properties: __spreadProps(__spreadValues(__spreadValues(__spreadValues(__spreadValues({}, readIdentity(node)), fill.properties), width ? { [width]: true } : {}), height ? { [height]: true } : {}), {
         path: geometry.map((path) => roundPath(path.data)).join(" "),
@@ -1860,20 +2016,35 @@
   };
   var isInFrame = (node) => node.parent !== null && node.parent.type !== "PAGE" && node.parent.type !== "SECTION" && node.parent.type !== "DOCUMENT";
   var isSizeError = (error) => error.property === "WIDTH" || error.property === "HEIGHT";
-  var serializeLayer = async (node) => {
-    var _a3, _b, _c, _d;
-    switch (node.type) {
-      case "FRAME":
-        return serializeFrame(node);
-      case "GROUP": {
-        if (((_a3 = node.children[0]) == null ? void 0 : _a3.name) === "Bounding box" && ((_b = node.children[1]) == null ? void 0 : _b.type) === "VECTOR") {
-          return serializeVector(node.children[1], node);
-        }
-        if (node.children.length === 2 && ((_c = node.children[0]) == null ? void 0 : _c.type) === "VECTOR" && ((_d = node.children[1]) == null ? void 0 : _d.type) === "RECTANGLE") {
-          return serializeVector(node.children[0], node);
-        }
-        return serializeGroup(node);
+  var findIcon = (node) => {
+    var _a4, _b, _c, _d;
+    if (node.type === "GROUP") {
+      if (((_a4 = node.children[0]) == null ? void 0 : _a4.name) === "Bounding box" && ((_b = node.children[1]) == null ? void 0 : _b.type) === "VECTOR") {
+        return { vector: node.children[1], box: node };
       }
+      if (node.children.length === 2 && ((_c = node.children[0]) == null ? void 0 : _c.type) === "VECTOR" && ((_d = node.children[1]) == null ? void 0 : _d.type) === "RECTANGLE") {
+        return { vector: node.children[0], box: node };
+      }
+    }
+    if ((node.type === "INSTANCE" || node.type === "COMPONENT") && node.layoutMode === "NONE" && node.children.length === 1) {
+      const child = node.children[0];
+      if (child.type === "VECTOR") return { vector: child, box: node };
+      const inner = findIcon(child);
+      if (inner !== void 0) return { vector: inner.vector, box: node };
+    }
+    return void 0;
+  };
+  var serializeLayer = async (node) => {
+    const icon = findIcon(node);
+    if (icon !== void 0) return serializeVector(icon.vector, icon.box);
+    switch (node.type) {
+      // A component or instance renders as the Frame it is, so its own settings and hover survive.
+      case "FRAME":
+      case "COMPONENT":
+      case "INSTANCE":
+        return serializeFrame(node);
+      case "GROUP":
+        return serializeGroup(node);
       case "VECTOR":
         return serializeVector(node);
       case "TEXT":
@@ -1892,8 +2063,8 @@
       mainComponentByInstanceId.set(instance.id, main);
       return main;
     };
-    const serializeTree = async (node) => {
-      var _a3;
+    const serializeTree = async (node, scope) => {
+      var _a4, _b, _c, _d;
       if (!node.visible) {
         return {
           properties: { type: node.type, EXCLUDE_FROM_OUTPUT: true },
@@ -1919,20 +2090,39 @@
           warnings: []
         };
       }
-      const result = await serializeLayer(node);
+      let result = await serializeLayer(node);
       if (!isInFrame(node)) {
         const sizeNotifications = result.errors.filter(isSizeError).map((error) => __spreadProps(__spreadValues({}, error), {
           explanation: "A top-level layer has no parent to size against, so its ".concat(error.property.toLowerCase(), " is left out.")
         }));
-        result.notifications = [...sizeNotifications, ...(_a3 = result.notifications) != null ? _a3 : []];
+        result.notifications = [...sizeNotifications, ...(_a4 = result.notifications) != null ? _a4 : []];
         result.errors = result.errors.filter((error) => !isSizeError(error));
       }
+      const isVector = result.properties.type === "VECTOR";
+      const hover = isVector ? void 0 : await findHover(node);
+      const ownScope = hover ? { counterpart: hover.variant, group: { used: false } } : scope;
+      if (hover !== void 0) result = combineReads([result, await readHover(node, hover)]);
+      if (hover === void 0 && scope !== void 0) {
+        const icon = isVector ? findIcon(node) : void 0;
+        const counterpart = icon ? (_c = (_b = findIcon(scope.counterpart)) == null ? void 0 : _b.vector) != null ? _c : scope.counterpart : scope.counterpart;
+        const component = isVector ? "Vector" : result.properties.type === "TEXT" ? "Text" : "Frame";
+        const groupHover = await readGroupHover((_d = icon == null ? void 0 : icon.vector) != null ? _d : node, counterpart, component);
+        if (Object.keys(groupHover.properties).length > 0) scope.group.used = true;
+        result = combineReads([result, groupHover]);
+      }
       const children = "children" in node ? node.children : [];
-      if (result.properties.type !== "VECTOR" && children.length > 0) {
+      if (!isVector && children.length > 0) {
         result.properties.children = await Promise.all(
-          children.map((child) => serializeTree(child))
+          children.map((child, index) => {
+            const counterpart = ownScope && findCounterpart(child, index, ownScope.counterpart);
+            return serializeTree(
+              child,
+              ownScope && counterpart ? __spreadProps(__spreadValues({}, ownScope), { counterpart }) : void 0
+            );
+          })
         );
       }
+      if (hover !== void 0 && (ownScope == null ? void 0 : ownScope.group.used)) result.properties.group = true;
       return result;
     };
     return serializeTree(root);
@@ -1955,8 +2145,8 @@
     return true;
   };
   var recordSelection = () => {
-    var _a3, _b;
-    const id = (_b = (_a3 = figma.currentPage.selection[0]) == null ? void 0 : _a3.id) != null ? _b : null;
+    var _a4, _b;
+    const id = (_b = (_a4 = figma.currentPage.selection[0]) == null ? void 0 : _a4.id) != null ? _b : null;
     if (restoringSelection) {
       restoringSelection = false;
       currentSelectionId = id;
@@ -1968,9 +2158,9 @@
   };
   recordSelection();
   figma.ui.onmessage = async (message) => {
-    var _a3, _b;
+    var _a4, _b;
     if (message.type === "toggleOutput") {
-      showOutput = (_a3 = message.showOutput) != null ? _a3 : true;
+      showOutput = (_a4 = message.showOutput) != null ? _a4 : true;
       renderSelection();
       return;
     }
@@ -2032,11 +2222,11 @@
       const notifications = [];
       const tree = await serializeNode(node);
       const collectIssues = (result) => {
-        var _a3, _b;
+        var _a4, _b;
         const withLayerType = (issue) => __spreadProps(__spreadValues({}, issue), { layerType: String(result.properties.type) });
         errors.push(...result.errors.map(withLayerType));
         warnings.push(...result.warnings.map(withLayerType));
-        notifications.push(...((_a3 = result.notifications) != null ? _a3 : []).map(withLayerType));
+        notifications.push(...((_a4 = result.notifications) != null ? _a4 : []).map(withLayerType));
         for (const child of (_b = result.properties.children) != null ? _b : []) {
           collectIssues(child);
         }
