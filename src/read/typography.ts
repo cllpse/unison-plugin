@@ -84,3 +84,27 @@ export const readTextDecoration = (node: TextNode): PropertiesAndIssues => {
     ],
   }
 }
+
+/** Figma's "Truncate text" as `typography-settings-truncate`; the library cuts text off after one line. */
+export const readTextTruncation = (node: TextNode): PropertiesAndIssues => {
+  if (node.textTruncation !== "ENDING") return { properties: {}, errors: [], warnings: [] }
+
+  const properties = { "typography-settings-truncate": true }
+
+  if (node.maxLines === null || node.maxLines === 1) return { properties, errors: [], warnings: [] }
+
+  return {
+    properties,
+    errors: [],
+    warnings: [
+      {
+        nodeId: node.id,
+        layer: truncateName(node.name),
+        property: "MAX LINES",
+        problem: "must be 1",
+        value: node.maxLines,
+        explanation: "Truncated after one line.",
+      },
+    ],
+  }
+}

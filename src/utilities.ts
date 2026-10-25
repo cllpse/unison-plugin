@@ -52,6 +52,7 @@ const PANEL_ORDER = [
   "typography-",
   "typography-align-",
   "typography-decoration-",
+  "typography-settings-",
   "fill-",
   "fill-hover-",
   "stroke-",
