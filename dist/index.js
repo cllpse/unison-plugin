@@ -692,6 +692,7 @@
   var STATE_VARIANTS = {
     hover: { web: "hover", native: "hover" },
     active: { web: "active", native: "active" },
+    focus: { web: "focus", native: "focus" },
     "focus-visible": { web: "focus-visible", native: "focus" },
     disabled: { web: "data-[disabled=true]", native: "data-[disabled=true]" },
     selected: { web: "data-[selected=true]", native: "data-[selected=true]" }
@@ -700,13 +701,13 @@
     Frame: {
       fill: {
         prefix: "bg",
-        states: ["hover", "active", "focus-visible", "disabled", "selected"],
-        groupStates: ["hover", "active", "focus-visible"]
+        states: ["hover", "active", "focus", "focus-visible", "disabled", "selected"],
+        groupStates: ["hover", "active", "focus", "focus-visible"]
       },
-      stroke: { prefix: "outline", states: ["hover", "focus-visible"], groupStates: ["hover"] }
+      stroke: { prefix: "outline", states: ["hover", "focus", "focus-visible"], groupStates: ["hover"] }
     },
-    Text: { fill: { prefix: "text", states: ["hover"], groupStates: ["hover", "active", "focus-visible"] } },
-    Vector: { fill: { prefix: "text", states: [], groupStates: ["hover", "active", "focus-visible"] } }
+    Text: { fill: { prefix: "text", states: ["hover"], groupStates: ["hover", "active", "focus", "focus-visible"] } },
+    Vector: { fill: { prefix: "text", states: [], groupStates: ["hover", "active", "focus", "focus-visible"] } }
   };
   var colorConfigs = (component) => Object.entries(COLOR_COMPONENTS[component]);
   var colorStateClassPrefixes = (component, platform) => colorConfigs(component).flatMap(([property, { prefix, states, groupStates }]) => [
