@@ -2003,9 +2003,20 @@
   // src/serialize/vector.ts
   var round = (value) => String(Math.round(value * 100) / 100);
   var roundPath = (data) => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (number) => round(Number(number)));
-  var resolvePixelClass = async (prefix, alias) => {
-    const className = await resolveBoundUnitClass(prefix, alias);
-    return className === "".concat(prefix, "full") ? void 0 : className;
+  var readSide = async (box, label, prefix, size, bound, errors) => {
+    if (bound === void 0) return void 0;
+    const className = await resolveBoundUnitClass(prefix, bound);
+    if (className === "".concat(prefix, "full")) return void 0;
+    if (className === void 0) {
+      errors.push({
+        nodeId: box.id,
+        layer: truncateName(box.name),
+        property: label,
+        problem: "not a token",
+        value: formatValue(size)
+      });
+    }
+    return className;
   };
   var serializeVector = async (node, box = node) => {
     const fill = await readFill(node);
@@ -2020,44 +2031,8 @@
       });
     }
     const bound = "boundVariables" in box ? box.boundVariables : void 0;
-    const width = (bound == null ? void 0 : bound.width) !== void 0 ? await resolvePixelClass("width-", bound.width) : void 0;
-    const height = (bound == null ? void 0 : bound.height) !== void 0 ? await resolvePixelClass("height-", bound.height) : void 0;
-    if ((bound == null ? void 0 : bound.width) === void 0) {
-      errors.push({
-        nodeId: box.id,
-        layer: truncateName(box.name),
-        property: "WIDTH",
-        problem: "not bound",
-        value: formatValue(box.width)
-      });
-    }
-    if ((bound == null ? void 0 : bound.width) !== void 0 && width === void 0) {
-      errors.push({
-        nodeId: box.id,
-        layer: truncateName(box.name),
-        property: "WIDTH",
-        problem: "not a token",
-        value: formatValue(box.width)
-      });
-    }
-    if ((bound == null ? void 0 : bound.height) === void 0) {
-      errors.push({
-        nodeId: box.id,
-        layer: truncateName(box.name),
-        property: "HEIGHT",
-        problem: "not bound",
-        value: formatValue(box.height)
-      });
-    }
-    if ((bound == null ? void 0 : bound.height) !== void 0 && height === void 0) {
-      errors.push({
-        nodeId: box.id,
-        layer: truncateName(box.name),
-        property: "HEIGHT",
-        problem: "not a token",
-        value: formatValue(box.height)
-      });
-    }
+    const width = await readSide(box, "WIDTH", "width-", box.width, bound == null ? void 0 : bound.width, errors);
+    const height = await readSide(box, "HEIGHT", "height-", box.height, bound == null ? void 0 : bound.height, errors);
     const warnings = [...readLayerSettings(box).warnings, ...fill.warnings];
     if (node.strokes.some((paint) => paint.visible !== false)) {
       warnings.push({

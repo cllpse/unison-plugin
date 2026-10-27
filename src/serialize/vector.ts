@@ -11,11 +11,36 @@ const round = (value: number): string => String(Math.round(value * 100) / 100)
 
 const roundPath = (data: string): string => data.replace(/-?\d*\.?\d+(?:e-?\d+)?/gi, (number) => round(Number(number)))
 
-/** A vector size in pixels: `spacing-full` stands for 100%, which a vector's box can't take. */
-const resolvePixelClass = async (prefix: string, alias: VariableAlias): Promise<string | undefined> => {
-  const className = await resolveBoundUnitClass(prefix, alias)
+/**
+ * One side's `width-` / `height-` flag: the spacing token the side is bound to. An unbound side, or one bound to
+ * `spacing-full`, gets no flag, and the vector stretches to its container on that side, keeping the viewBox's aspect
+ * ratio. A side bound to another variable is an error.
+ */
+const readSide = async (
+  box: SceneNode,
+  label: "WIDTH" | "HEIGHT",
+  prefix: "width-" | "height-",
+  size: number,
+  bound: VariableAlias | undefined,
+  errors: Issue[],
+): Promise<string | undefined> => {
+  if (bound === undefined) return undefined
 
-  return className === `${prefix}full` ? undefined : className
+  const className = await resolveBoundUnitClass(prefix, bound)
+
+  if (className === `${prefix}full`) return undefined
+
+  if (className === undefined) {
+    errors.push({
+      nodeId: box.id,
+      layer: truncateName(box.name),
+      property: label,
+      problem: "not a token",
+      value: formatValue(size),
+    })
+  }
+
+  return className
 }
 
 /**
@@ -40,51 +65,10 @@ export const serializeVector = async (node: VectorNode, box: SceneNode = node): 
     })
   }
 
-  // A vector renders in a fixed `width-` / `height-` box; like a fixed Frame, both sides must be bound to a unit
-  // design token.
+  // A side bound to a spacing token pins the box; the others stretch to the container.
   const bound = "boundVariables" in box ? box.boundVariables : undefined
-  const width = bound?.width !== undefined ? await resolvePixelClass("width-", bound.width) : undefined
-  const height = bound?.height !== undefined ? await resolvePixelClass("height-", bound.height) : undefined
-
-  if (bound?.width === undefined) {
-    errors.push({
-      nodeId: box.id,
-      layer: truncateName(box.name),
-      property: "WIDTH",
-      problem: "not bound",
-      value: formatValue(box.width),
-    })
-  }
-
-  if (bound?.width !== undefined && width === undefined) {
-    errors.push({
-      nodeId: box.id,
-      layer: truncateName(box.name),
-      property: "WIDTH",
-      problem: "not a token",
-      value: formatValue(box.width),
-    })
-  }
-
-  if (bound?.height === undefined) {
-    errors.push({
-      nodeId: box.id,
-      layer: truncateName(box.name),
-      property: "HEIGHT",
-      problem: "not bound",
-      value: formatValue(box.height),
-    })
-  }
-
-  if (bound?.height !== undefined && height === undefined) {
-    errors.push({
-      nodeId: box.id,
-      layer: truncateName(box.name),
-      property: "HEIGHT",
-      problem: "not a token",
-      value: formatValue(box.height),
-    })
-  }
+  const width = await readSide(box, "WIDTH", "width-", box.width, bound?.width, errors)
+  const height = await readSide(box, "HEIGHT", "height-", box.height, bound?.height, errors)
 
   const warnings: Issue[] = [...readLayerSettings(box).warnings, ...fill.warnings]
 
